@@ -21,7 +21,9 @@ npm run check
 
 - 53 alimentos en español, extraídos del archivo oficial USDA SR28, con identificador NDB, nombre original y valores por 100 g.
 - Registro por gramos y porciones orientativas, favoritos, recientes, alimentos propios, edición, duplicación y repetición del día anterior.
-- 68 ejercicios con variantes en barra, mancuernas, poleas, máquinas y peso corporal; cuatro rutinas editables y ejercicios personalizados.
+- 68 ejercicios agrupados en empuje, jale, pierna y core, con búsqueda por nombre, equipo, músculo y patrón. Los personalizados también pueden elegir su grupo.
+- 34 ilustraciones SVG originales para representar las familias de movimientos, con variantes de equipo en el selector, las rutinas y las sesiones.
+- Cuatro plantillas y rutinas propias guardadas: crear, editar, ordenar ejercicios, definir series/repeticiones/RIR y reutilizar. También se puede guardar una sesión como rutina; cada sesión nueva reinicia las casillas de series completadas.
 - Series, carga, repeticiones, RIR, sensación, historial y progreso por ejercicio.
 - Series directas e indirectas por músculo, con desglose de los ejercicios que contribuyen. Un mismo ejercicio puede tener varios músculos directos y secundarios, editables en cada sesión.
 - Ventanas de **últimos 7 días móviles** (fecha del diario y los 6 días anteriores) y **semana calendario** (lunes hasta la fecha del diario). No se incluyen registros posteriores a la fecha elegida.
@@ -29,6 +31,7 @@ npm run check
 - Configuración inicial con edad, estatura, peso, sexo para la ecuación, actividad diaria y objetivo; propone calorías y macros iniciales editables.
 - Registro diario de peso, media móvil de siete días, comparación entre semanas y gráficas.
 - Exportación e importación JSON con validación.
+- Campos de al menos 16 px en móvil para evitar el acercamiento al enfocarlos, viewport limitado a escala 1 y gestos de página sin zoom. Safari y los ajustes de accesibilidad del navegador pueden conservar el zoom manual ([WebKit](https://webkit.org/blog/7367/new-interaction-behaviors-in-ios-10/)).
 
 ## Publicación en GitHub Pages
 
@@ -65,6 +68,7 @@ Las medias nutricionales omiten días sin registros y pueden incluir días incom
 - `dist/`: aplicación publicable, sin compilación.
 - `dist/core.js`: cálculos puros y validación de copias.
 - `dist/app.js`: interfaz, persistencia y flujos de registro.
+- `dist/exercise-visuals.js`: clasificación de patrones y dibujos SVG por movimiento.
 - `data/build-foods.mjs`: extracción reproducible de la selección USDA.
 - `tests/core.test.mjs`: verificaciones con el ejecutor nativo de Node.js.
 - `.openai/hosting.json`: configuración conservada del alojamiento anterior en Sites; GitHub Pages publica `dist/` con su propio workflow.

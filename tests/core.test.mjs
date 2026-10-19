@@ -276,6 +276,42 @@ test("importación rechaza valores imposibles, datos incompletos y fechas invál
     favorites: [],
   };
   assert.equal(validState(state), true);
+  const routine = {
+    id: "routine-test",
+    name: "Mi rutina",
+    note: "Personal",
+    exercises: exerciseSession("2026-10-18", "bench", 3).exercises,
+  };
+  assert.equal(validState({ ...state, routines: [routine] }), true);
+  assert.equal(
+    validState({ ...state, routines: [{ ...routine, exercises: [] }] }),
+    false,
+  );
+  assert.equal(
+    validState({
+      ...state,
+      routines: [
+        {
+          ...routine,
+          exercises: [{ ...routine.exercises[0], movement: "inventado" }],
+        },
+      ],
+    }),
+    false,
+  );
+  assert.equal(
+    validState({
+      ...state,
+      routines: [
+        { ...routine, exercises: [{ ...routine.exercises[0], sets: [] }] },
+      ],
+    }),
+    false,
+  );
+  assert.equal(
+    validState({ ...state, routines: [{ ...routine, id: '"><svg>' }] }),
+    false,
+  );
   assert.equal(
     validState({ ...state, goals: { ...state.goals, kcal: -1 } }),
     false,

@@ -6,6 +6,7 @@ import {
   mealTotals,
   completedSets,
   sessionVolume,
+  routinePlan,
   trainingStats,
   trainingDays,
   weightStats,
@@ -17,6 +18,12 @@ import {
   exerciseMuscles,
   canonicalMuscle,
 } from "./exercises.js";
+
+import {
+  movementGroups,
+  exerciseMovement,
+  exerciseSvg,
+} from "./exercise-visuals.js";
 
 const $ = (s) => document.querySelector(s);
 const fmt = (n, decimals = 0) =>
@@ -147,6 +154,7 @@ const defaults = () => ({
   weights: [],
   favorites: [],
   customFoods: [],
+  routines: [],
 });
 const allFoods = () => [...state.customFoods, ...foods];
 const trainingMode = () =>
@@ -159,7 +167,7 @@ const exerciseCatalog = () => [
   ...exercises,
   ...[
     ...new Map(
-      state.sessions
+      [...state.sessions, ...(state.routines || [])]
         .flatMap((s) => s.exercises)
         .filter((e) => !exercises.some((x) => x.id === e.exerciseId))
         .map((e) => [
@@ -170,7 +178,8 @@ const exerciseCatalog = () => [
             muscle: e.muscle,
             primaryMuscles: exerciseMuscles(e).primary,
             secondaryMuscles: exerciseMuscles(e).secondary,
-            equipment: "Personalizado",
+            equipment: e.equipment || "Personalizado",
+            movement: e.movement,
           },
         ]),
     ).values(),
@@ -463,19 +472,7 @@ function trainingPage() {
       : tab === "session"
         ? `<div class="grid-2 workout-grid"><article class="card">${session ? sessionEditor(session) : empty("Tu próxima sesión empieza aquí.", "Elige una rutina o crea una sesión con tus ejercicios.", "new-session", "Crear sesión", "dumbbell")}</article><div>${muscleVolumeCard()}<article class="card spacer-top"><h3>Entrena con contexto</h3><p class="help-text" style="margin-top:13px">El RIR registra cuántas repeticiones crees que podrías haber hecho al terminar una serie. 0 = ninguna más.</p><p class="help-text" style="margin-top:10px">Marca ${icon("check").replace('class="icon', 'style="display:inline;width:12px;height:12px" class="icon')} cada serie al completarla. El volumen suma peso × repeticiones de las series realizadas. En ejercicios con peso corporal registra solo la carga añadida.</p><p class="help-text" style="margin-top:10px">Cada ejercicio puede sumar series directas e indirectas a distintos músculos. Puedes editar esa distribución con el botón de músculos de cada ejercicio.</p></article></div></div>`
         : tab === "routines"
-          ? `<div class="grid-2">${routines
-              .map(
-                (r, i) =>
-                  `<article class="card"><div class="card-title"><h2>${r.name}</h2><span class="tag">${r.ids.length} ejercicios</span></div><p class="help-text">${r.note}</p><div class="spacer-top">${r.ids
-                    .map((id) => {
-                      const ex = exercises.find((e) => e.id === id);
-                      return `<div class="history-row"><div class="small-symbol">${icon("dumbbell")}</div><div><h4>${ex.name}</h4><p>${ex.muscle} · ${ex.equipment}</p></div></div>`;
-                    })
-                    .join(
-                      "",
-                    )}</div>${button("Usar rutina", "use-routine", "plus", "full spacer-top", `data-index="${i}"`)}<p class="source-note">Plantilla editable. Ajusta series, cargas y repeticiones a tu plan.</p></article>`,
-              )
-              .join("")}</div>`
+          ? routinesPage()
           : historyPage()
   }`;
 }
@@ -483,7 +480,7 @@ function sessionEditor(s) {
   return `<div class="workout-header"><div><h2>${esc(s.name)}</h2><p class="subtitle" style="font-size:10px;margin-top:5px">${dateLabel(s.date, { weekday: "long", day: "numeric", month: "long" })} · ${s.finished ? "Sesión completada" : "En curso"} · ${fmt(sessionVolume(s))} kg de volumen</p></div><div>${iconButton("edit", "rename-session", "Cambiar nombre de sesión", `data-id="${s.id}"`)}${iconButton("trash", "delete-session", "Eliminar sesión", `data-id="${s.id}"`)}</div></div>${s.exercises
     .map(
       (ex, ei) =>
-        `<div class="exercise-card"><div class="exercise-top"><div class="small-symbol">${icon("dumbbell")}</div><div><h3>${esc(ex.name)}</h3><p>${esc(exerciseMuscles(ex).primary.join(" + "))} · ${lastPerformance(ex.exerciseId, s)}</p></div>${iconButton("target", "edit-exercise-muscles", "Editar músculos de " + ex.name, `data-session="${s.id}" data-ei="${ei}"`)}${iconButton("x", "remove-exercise", "Quitar ejercicio", `data-session="${s.id}" data-ei="${ei}"`)}</div><table class="set-table"><thead><tr><th>Serie</th><th>Peso kg</th><th>Reps</th><th>RIR</th><th>Hecha</th><th></th></tr></thead><tbody>${ex.sets
+        `<div class="exercise-card"><div class="exercise-top">${exerciseSvg(ex)}<div><h3>${esc(ex.name)}</h3><p>${esc(exerciseMuscles(ex).primary.join(" + "))} · ${lastPerformance(ex.exerciseId, s)}</p></div>${iconButton("target", "edit-exercise-muscles", "Editar músculos de " + ex.name, `data-session="${s.id}" data-ei="${ei}"`)}${iconButton("x", "remove-exercise", "Quitar ejercicio", `data-session="${s.id}" data-ei="${ei}"`)}</div><table class="set-table"><thead><tr><th>Serie</th><th>Peso kg</th><th>Reps</th><th>RIR</th><th>Hecha</th><th></th></tr></thead><tbody>${ex.sets
           .map(
             (set, si) =>
               `<tr class="${set.done ? "completed" : ""}"><td>${si + 1}</td>${[
@@ -505,7 +502,7 @@ function sessionEditor(s) {
     )
     .join(
       "",
-    )}${button("Añadir ejercicio", "add-exercise", "plus", "full", `data-id="${s.id}"`)}<div class="field spacer-top"><label for="session-notes">Notas de la sesión</label><textarea id="session-notes" data-session="${s.id}" placeholder="¿Cómo te fue hoy? Sueño, energía, molestias…" maxlength="2000">${esc(s.notes || "")}</textarea></div><div class="workout-bottom"><div><p class="micro-label">¿Cómo te sentiste?</p><div class="feeling">${["😣", "😕", "😐", "🙂", "🤩"].map((emoji, i) => `<button class="${s.feeling === i + 1 ? "selected" : ""}" data-action="feeling" data-id="${s.id}" data-value="${i + 1}" aria-label="Sensación ${i + 1} de 5" aria-pressed="${s.feeling === i + 1}">${emoji}</button>`).join("")}</div></div>${button(s.finished ? "Reabrir sesión" : "Finalizar sesión", "finish-session", s.finished ? "edit" : "check", s.finished ? "" : "primary", `data-id="${s.id}"`)}</div>`;
+    )}${button("Añadir ejercicio", "add-exercise", "plus", "full", `data-id="${s.id}"`)}${s.exercises.length ? button("Guardar como rutina", "save-session-routine", "book", "full spacer-top", `data-id="${s.id}"`) : ""}<div class="field spacer-top"><label for="session-notes">Notas de la sesión</label><textarea id="session-notes" data-session="${s.id}" placeholder="¿Cómo te fue hoy? Sueño, energía, molestias…" maxlength="2000">${esc(s.notes || "")}</textarea></div><div class="workout-bottom"><div><p class="micro-label">¿Cómo te sentiste?</p><div class="feeling">${["😣", "😕", "😐", "🙂", "🤩"].map((emoji, i) => `<button class="${s.feeling === i + 1 ? "selected" : ""}" data-action="feeling" data-id="${s.id}" data-value="${i + 1}" aria-label="Sensación ${i + 1} de 5" aria-pressed="${s.feeling === i + 1}">${emoji}</button>`).join("")}</div></div>${button(s.finished ? "Reabrir sesión" : "Finalizar sesión", "finish-session", s.finished ? "edit" : "check", s.finished ? "" : "primary", `data-id="${s.id}"`)}</div>`;
 }
 function lastPerformance(id, current) {
   const prior = state.sessions
@@ -1097,7 +1094,14 @@ function newSessionModal() {
   openModal(
     "Tu próxima sesión.",
     "Elige una base o empieza con tus propios ejercicios.",
-    `<div class="field"><label for="session-name">Nombre de la sesión</label><input id="session-name" maxlength="100" value="Mi entrenamiento" placeholder="Ej. Torso A"></div><div class="spacer-top">${routines.map((r, i) => `<div class="routine-card"><h3>${r.name}</h3><p>${r.note} · ${r.ids.length} ejercicios</p>${button("Empezar esta rutina", "use-routine", "arrow", "small", `data-index="${i}"`)}</div>`).join("")}</div><div class="modal-footer">${button("Crear sesión libre", "blank-session", "plus", "primary")}</div>`,
+    `<div class="field"><label for="session-name">Nombre de la sesión</label><input id="session-name" maxlength="100" value="Mi entrenamiento" placeholder="Ej. Torso A"></div><div class="spacer-top">${routineCatalog()
+      .map(
+        (r, i) =>
+          `<div class="routine-card"><h3>${esc(r.name)}</h3><p>${esc(r.note || "Mi rutina")} · ${routineExercises(r).length} ejercicios</p>${button("Empezar esta rutina", "use-routine", "arrow", "small", `data-index="${i}"`)}</div>`,
+      )
+      .join(
+        "",
+      )}</div><div class="modal-footer">${button("Crear sesión libre", "blank-session", "plus", "primary")}${button("Crear rutina", "create-routine", "book", "")}</div>`,
   );
 }
 function startSession(routine = null) {
@@ -1110,11 +1114,7 @@ function startSession(routine = null) {
     finished: false,
     feeling: 3,
     notes: "",
-    exercises: routine
-      ? routine.ids.map((id) =>
-          makeExercise(exercises.find((e) => e.id === id)),
-        )
-      : [],
+    exercises: routine ? routineExercises(routine) : [],
   };
   state.sessions.push(session);
   currentSessionId = session.id;
@@ -1122,12 +1122,19 @@ function startSession(routine = null) {
   tab = "session";
   closeModal();
   save("Sesión creada. Tú marcas el ritmo.");
+  if (routine)
+    $(".workout-header")?.scrollIntoView({
+      block: "start",
+      behavior: "instant",
+    });
   if (!routine) exerciseModal(session.id);
 }
 function makeExercise(ex) {
   const roles = exerciseMuscles(ex);
   return {
     exerciseId: ex.id,
+    equipment: ex.equipment || "Personalizado",
+    movement: exerciseMovement(ex).group,
     name: ex.name,
     muscle: ex.muscle,
     primaryMuscles: roles.primary,
@@ -1140,48 +1147,251 @@ function makeExercise(ex) {
     })),
   };
 }
-function exerciseModal(sessionId) {
-  openModal(
-    "Añade tu próximo ejercicio.",
-    "Busca en la biblioteca o crea uno personalizado.",
-    `<div class="search">${icon("search")}<input id="exercise-search" placeholder="Buscar sentadilla, pecho, mancuernas…" aria-label="Buscar ejercicio" autofocus></div><div id="exercise-list" class="modal-food-list"></div><div class="modal-footer">${button("Crear ejercicio", "custom-exercise", "plus", "small", `data-id="${sessionId}"`)}</div>`,
-  );
-  const draw = () => {
-    const q = normalize($("#exercise-search").value);
-    $("#exercise-list").innerHTML =
-      exerciseCatalog()
-        .filter((e) => {
-          const roles = exerciseMuscles(e);
-          const text = normalize(
-            [e.name, e.equipment, ...roles.primary, ...roles.secondary].join(
-              " ",
-            ),
-          );
-          return q
-            .split(/\s+/)
-            .every(
-              (term) =>
-                text.includes(term) || text.replaceAll(" ", "").includes(term),
-            );
-        })
-        .map(
-          (e) =>
-            `<div class="exercise-picker"><div class="food-emoji">🏋️</div><div><h3>${esc(e.name)}</h3><p>${esc(exerciseMuscles(e).primary.join(" + "))} · ${esc(e.equipment)}</p><p>${exerciseMuscles(e).secondary.length ? "Indirectas: " + esc(exerciseMuscles(e).secondary.join(", ")) : "Sin músculos secundarios asignados"}</p></div>${iconButton("plus", "select-exercise", `Añadir ${e.name}`, `data-id="${e.id}" data-session="${sessionId}"`)}</div>`,
+const routineCatalog = () =>
+  [...(state.routines || [])].reverse().concat(routines);
+function routineExercises(r) {
+  if (r.ids)
+    return r.ids.map((id) => makeExercise(exercises.find((e) => e.id === id)));
+  return routinePlan(r.exercises);
+}
+function routinesPage() {
+  return `<div class="section-heading"><div><h2>Tus rutinas</h2><p>Elige ejercicios por patrón de movimiento y guarda tu propia combinación.</p></div>${button("Crear rutina", "create-routine", "plus")}</div><div class="grid-2">${routineCatalog()
+    .map(
+      (r, i) =>
+        `<article class="card" data-routine-card="${esc(r.id || "template-" + i)}"><div class="card-title"><h2>${esc(r.name)}</h2><span class="tag">${r.id ? "Mi rutina" : "Plantilla"}</span></div><p class="help-text">${esc(r.note || "Lista para tu próxima sesión.")}</p><div class="spacer-top">${routineExercises(
+          r,
         )
+          .map(
+            (ex) =>
+              `<div class="history-row">${exerciseSvg(ex)}<div><h4>${esc(ex.name)}</h4><p>${esc(exerciseMovement(ex).label)} · ${ex.sets.length} series</p></div></div>`,
+          )
+          .join(
+            "",
+          )}</div><div class="routine-actions">${button("Usar rutina", "use-routine", "plus", "primary", `data-index="${i}"`)}${button(r.id ? "Editar" : "Personalizar", "edit-routine", "edit", "", `data-index="${i}"`)}${r.id ? iconButton("trash", "delete-routine", "Eliminar " + r.name, `data-id="${r.id}"`) : ""}</div></article>`,
+    )
+    .join("")}</div>`;
+}
+function exerciseBrowserMarkup() {
+  return `<div class="exercise-browser"><div class="search">${icon("search")}<input id="exercise-search" placeholder="Buscar ejercicio, músculo o equipo…" aria-label="Buscar ejercicio"></div><div class="movement-filters" role="group" aria-label="Patrón de movimiento">${[{ id: "all", name: "Todos" }, ...movementGroups].map((g) => `<button class="filter ${g.id === "all" ? "active" : ""}" type="button" data-movement-filter="${g.id}" aria-pressed="${g.id === "all"}">${g.name}</button>`).join("")}</div><div id="exercise-list" class="modal-food-list exercise-browser-list"></div></div>`;
+}
+function bindExerciseBrowser(onSelect, selectedIds = () => []) {
+  let group = "all";
+  const draw = () => {
+    const q = normalize($("#exercise-search").value).trim();
+    const selected = selectedIds();
+    const found = exerciseCatalog().filter((ex) => {
+      const move = exerciseMovement(ex),
+        roles = exerciseMuscles(ex);
+      const label = movementGroups.find((g) => g.id === move.group).name;
+      const text = normalize(
+        [
+          ex.name,
+          ex.equipment,
+          label,
+          move.label,
+          ...roles.primary,
+          ...roles.secondary,
+        ].join(" "),
+      );
+      return (
+        (group === "all" || move.group === group) &&
+        q
+          .split(/\s+/)
+          .every(
+            (term) =>
+              text.includes(term) || text.replaceAll(" ", "").includes(term),
+          )
+      );
+    });
+    $("#exercise-list").innerHTML =
+      movementGroups
+        .map((g) => {
+          const items = found.filter(
+            (ex) => exerciseMovement(ex).group === g.id,
+          );
+          if (!items.length) return "";
+          return `<section class="movement-section"><h3 class="movement-heading">${g.name}<span>${items.length} ejercicios · ${g.detail}</span></h3>${items
+            .map((ex) => {
+              const roles = exerciseMuscles(ex),
+                chosen = selected.includes(ex.id);
+              return `<div class="exercise-picker">${exerciseSvg(ex)}<div class="exercise-picker-copy"><h3>${esc(ex.name)}</h3><p>${esc(exerciseMovement(ex).label)} · ${esc(ex.equipment)}</p><small>${esc(roles.primary.join(" + "))}${roles.secondary.length ? " · Indirectas: " + esc(roles.secondary.join(", ")) : ""}</small></div><button type="button" class="icon-btn" data-pick-exercise="${esc(ex.id)}" aria-label="${chosen ? "Ya añadido: " : "Añadir "}${esc(ex.name)}" ${chosen ? "disabled" : ""}>${icon(chosen ? "check" : "plus")}</button></div>`;
+            })
+            .join("")}</section>`;
+        })
         .join("") ||
       empty(
         "No encontramos ese ejercicio.",
-        "Puedes crearlo con el botón de abajo.",
+        "Prueba otro patrón, músculo o nombre.",
       );
   };
   $("#exercise-search").addEventListener("input", draw);
+  document.querySelectorAll("[data-movement-filter]").forEach((b) =>
+    b.addEventListener("click", () => {
+      group = b.dataset.movementFilter;
+      document.querySelectorAll("[data-movement-filter]").forEach((tab) => {
+        tab.classList.toggle("active", tab === b);
+        tab.setAttribute("aria-pressed", String(tab === b));
+      });
+      draw();
+    }),
+  );
+  $("#exercise-list").addEventListener("click", (event) => {
+    const target = event.target.closest("[data-pick-exercise]");
+    if (!target || target.disabled) return;
+    const ex = exerciseCatalog().find(
+      (ex) => ex.id === target.dataset.pickExercise,
+    );
+    if (ex) onSelect(ex);
+  });
   draw();
+  return draw;
+}
+function exerciseModal(sessionId) {
+  openModal(
+    "Añade tu próximo ejercicio.",
+    "Explora por patrón de movimiento o busca en la biblioteca.",
+    `${exerciseBrowserMarkup()}<div class="modal-footer">${button("Crear ejercicio", "custom-exercise", "plus", "small", `data-id="${sessionId}"`)}</div>`,
+  );
+  bindExerciseBrowser((ex) => {
+    const session = state.sessions.find((s) => s.id === sessionId);
+    if (session.exercises.length >= 100)
+      return toast("Esta sesión ya tiene 100 ejercicios.");
+    session.exercises.push(makeExercise(ex));
+    closeModal();
+    save("Ejercicio añadido a tu sesión.");
+  });
+}
+function routineModal(routine = null, session = null) {
+  const draft = session
+    ? routineExercises({ exercises: session.exercises })
+    : routine
+      ? routineExercises(routine)
+      : [];
+  openModal(
+    routine?.id ? "Editar rutina" : "Crear tu rutina",
+    "Combina patrones y ordena los ejercicios a tu manera.",
+    `<div class="routine-builder"><div class="field"><label for="routine-name">Nombre de la rutina</label><input id="routine-name" maxlength="100" required placeholder="Ej. Empuje A" value="${esc(routine?.name || session?.name || "")}"></div><div class="tabs routine-builder-tabs" role="tablist" aria-label="Editor de rutina"><button type="button" class="tab ${draft.length ? "" : "active"}" role="tab" aria-selected="${!draft.length}" data-routine-panel="browse">Explorar ejercicios</button><button type="button" class="tab ${draft.length ? "active" : ""}" role="tab" aria-selected="${!!draft.length}" data-routine-panel="selection" id="routine-selection-tab">Mi selección (${draft.length})</button></div><div class="routine-builder-panel" data-routine-pane="browse" ${draft.length ? "hidden" : ""}>${exerciseBrowserMarkup()}</div><div class="routine-builder-panel" data-routine-pane="selection" ${draft.length ? "" : "hidden"}><div id="routine-draft" class="routine-draft"></div><p class="help-text">Ajusta el orden, las series y los objetivos de reps y RIR. En la sesión podrás editar cada serie.</p></div><p id="routine-message" class="routine-message" role="status" aria-live="polite" hidden></p><div class="modal-footer"><button type="button" class="btn" data-action="close">Cancelar</button><button type="button" class="btn primary" id="save-routine">${icon("check")}Guardar rutina</button></div></div>`,
+  );
+  document.querySelectorAll("[data-routine-panel]").forEach((button) =>
+    button.addEventListener("click", () => {
+      document.querySelectorAll("[data-routine-panel]").forEach((tab) => {
+        tab.classList.toggle("active", tab === button);
+        tab.setAttribute("aria-selected", String(tab === button));
+      });
+      document
+        .querySelectorAll("[data-routine-pane]")
+        .forEach(
+          (pane) =>
+            (pane.hidden =
+              pane.dataset.routinePane !== button.dataset.routinePanel),
+        );
+    }),
+  );
+  const showRoutineMessage = (message) => {
+    $("#routine-message").textContent = message;
+    $("#routine-message").hidden = false;
+  };
+  const drawDraft = () => {
+    $("#routine-selection-tab").textContent = `Mi selección (${draft.length})`;
+    $("#routine-draft").innerHTML = draft.length
+      ? draft
+          .map(
+            (ex, i) =>
+              `<div class="routine-draft-row">${exerciseSvg(ex)}<div class="routine-draft-copy"><strong>${i + 1}. ${esc(ex.name)}</strong><div class="routine-targets">${[
+                ["sets", "Series", ex.sets.length, 1, 200],
+                ["reps", "Reps", ex.sets[0].reps, 1, 200],
+                ["rir", "RIR", ex.sets[0].rir, 0, 10],
+              ]
+                .map(
+                  ([field, label, value, min, max]) =>
+                    `<label>${label}<input type="number" inputmode="numeric" data-routine-field="${field}" data-index="${i}" aria-label="${label} de ${esc(ex.name)}" min="${min}" max="${max}" step="1" value="${value}" ${field !== "rir" ? "required" : ""}></label>`,
+                )
+                .join(
+                  "",
+                )}</div></div><div class="routine-order"><button type="button" class="icon-btn" data-routine-step="up" data-index="${i}" aria-label="Subir ${esc(ex.name)}" ${i === 0 ? "disabled" : ""}>↑</button><button type="button" class="icon-btn" data-routine-step="down" data-index="${i}" aria-label="Bajar ${esc(ex.name)}" ${i === draft.length - 1 ? "disabled" : ""}>↓</button><button type="button" class="icon-btn" data-routine-step="remove" data-index="${i}" aria-label="Quitar ${esc(ex.name)}">${icon("x")}</button></div></div>`,
+          )
+          .join("")
+      : '<p class="help-text routine-empty">Añade ejercicios de la biblioteca. Se guardarán aquí en el orden que elijas.</p>';
+  };
+  const refreshBrowser = bindExerciseBrowser(
+    (ex) => {
+      if (draft.length >= 100)
+        return showRoutineMessage("La rutina admite hasta 100 ejercicios.");
+      if (draft.some((item) => item.exerciseId === ex.id)) return;
+      $("#routine-message").hidden = true;
+      draft.push(makeExercise(ex));
+      drawDraft();
+      refreshBrowser();
+    },
+    () => draft.map((ex) => ex.exerciseId),
+  );
+  $("#routine-draft").addEventListener("click", (event) => {
+    const b = event.target.closest("[data-routine-step]");
+    if (!b || b.disabled) return;
+    const i = Number(b.dataset.index),
+      action = b.dataset.routineStep;
+    if (action === "remove") draft.splice(i, 1);
+    else {
+      const j = i + (action === "up" ? -1 : 1);
+      [draft[i], draft[j]] = [draft[j], draft[i]];
+    }
+    drawDraft();
+    refreshBrowser();
+  });
+  $("#routine-draft").addEventListener("change", (event) => {
+    const input = event.target.closest("[data-routine-field]");
+    if (!input) return;
+    if (!input.reportValidity()) return;
+    const ex = draft[Number(input.dataset.index)],
+      field = input.dataset.routineField;
+    const value =
+      input.value === "" && field === "rir" ? "" : Number(input.value);
+    if (field === "sets")
+      ex.sets = Array.from({ length: value }, (_, i) => ({
+        ...(ex.sets[i] || ex.sets.at(-1)),
+        done: false,
+      }));
+    else ex.sets.forEach((set) => (set[field] = value));
+  });
+  $("#save-routine").addEventListener("click", () => {
+    if (!$("#routine-name").reportValidity()) return;
+    if (!$("#routine-name").value.trim())
+      return showRoutineMessage("Ponle un nombre a tu rutina.");
+    if (!draft.length)
+      return showRoutineMessage("Añade al menos un ejercicio a la rutina.");
+    if (
+      [...document.querySelectorAll("[data-routine-field]")].some(
+        (input) => !input.reportValidity(),
+      )
+    )
+      return;
+    if ((state.routines || []).length >= 500 && !routine?.id)
+      return showRoutineMessage("Ya tienes 500 rutinas guardadas.");
+    const saved = {
+      id: routine?.id || "routine-" + uid(),
+      name: $("#routine-name").value.trim(),
+      note: routine?.note || "Rutina personal",
+      exercises: draft,
+    };
+    state.routines ||= [];
+    const index = state.routines.findIndex((r) => r.id === saved.id);
+    if (index < 0) state.routines.push(saved);
+    else state.routines[index] = saved;
+    closeModal();
+    view = "training";
+    tab = "routines";
+    save("Rutina guardada. Puedes usarla en tu próxima sesión.");
+    document
+      .querySelector(`[data-routine-card="${saved.id}"]`)
+      ?.scrollIntoView({ block: "start", behavior: "instant" });
+  });
+  drawDraft();
 }
 function customExerciseModal(sessionId) {
   openModal(
     "Crea tu ejercicio.",
     "Se añadirá a esta sesión y podrás repetirlo copiando la sesión.",
-    `<form id="custom-exercise-form"><div class="form-grid"><div class="field wide"><label for="exercise-name">Nombre</label><input id="exercise-name" name="name" maxlength="100" required placeholder="Ej. Remo en máquina" autofocus></div><div class="field wide"><label for="exercise-muscle">Grupo muscular principal</label><select id="exercise-muscle" name="muscle">${muscleNames.map((m) => `<option>${m}</option>`).join("")}</select></div><fieldset class="field wide secondary-muscles"><legend>Músculos secundarios · opcional</legend><div class="muscle-checkboxes">${muscleNames.map((m) => `<label><input type="checkbox" name="secondary" value="${m}"> ${m}</label>`).join("")}</div></fieldset></div><div class="modal-footer"><button type="button" class="btn" data-action="close">Cancelar</button><button class="btn primary" type="submit">Añadir ejercicio</button></div></form>`,
+    `<form id="custom-exercise-form"><div class="form-grid"><div class="field wide"><label for="exercise-name">Nombre</label><input id="exercise-name" name="name" maxlength="100" required placeholder="Ej. Remo en máquina" autofocus></div><div class="field wide"><label for="exercise-muscle">Grupo muscular principal</label><select id="exercise-muscle" name="muscle">${muscleNames.map((m) => `<option>${m}</option>`).join("")}</select></div><div class="field wide"><label for="exercise-movement">Patrón de movimiento</label><select id="exercise-movement" name="movement"><option value="">Según el músculo principal</option>${movementGroups.map((g) => `<option value="${g.id}">${g.name}</option>`).join("")}</select></div><fieldset class="field wide secondary-muscles"><legend>Músculos secundarios · opcional</legend><div class="muscle-checkboxes">${muscleNames.map((m) => `<label><input type="checkbox" name="secondary" value="${m}"> ${m}</label>`).join("")}</div></fieldset></div><div class="modal-footer"><button type="button" class="btn" data-action="close">Cancelar</button><button class="btn primary" type="submit">Añadir ejercicio</button></div></form>`,
   );
   $("#custom-exercise-form").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -1193,6 +1403,8 @@ function customExerciseModal(sessionId) {
         id: "exercise-" + uid(),
         name: d.get("name").trim(),
         muscle: d.get("muscle"),
+        equipment: "Personalizado",
+        movement: d.get("movement") || undefined,
         primaryMuscles: [d.get("muscle")],
         secondaryMuscles: d
           .getAll("secondary")
@@ -1437,8 +1649,31 @@ document.addEventListener("click", (e) => {
     case "blank-session":
       startSession();
       break;
+    case "create-routine":
+      routineModal();
+      break;
+    case "edit-routine":
+      routineModal(routineCatalog()[+d.index]);
+      break;
+    case "save-session-routine":
+      routineModal(
+        null,
+        state.sessions.find((s) => s.id === d.id),
+      );
+      break;
+    case "delete-routine":
+      confirmModal(
+        "Eliminar rutina",
+        "La rutina se eliminará de tu lista. Las sesiones ya registradas se conservan.",
+        () => {
+          state.routines = (state.routines || []).filter((r) => r.id !== d.id);
+          save("Rutina eliminada.");
+        },
+        "Eliminar rutina",
+      );
+      break;
     case "use-routine":
-      startSession(routines[+d.index]);
+      startSession(routineCatalog()[+d.index]);
       break;
     case "add-exercise":
       exerciseModal(d.id);

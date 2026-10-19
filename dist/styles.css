@@ -1513,6 +1513,255 @@ dialog::backdrop {
   background: #1c322852;
   backdrop-filter: blur(4px);
 }
+
+/* Evita que los gestos de la interfaz cambien la escala de la aplicación. */
+html,
+body {
+  touch-action: pan-x pan-y;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+.exercise-art {
+  width: 78px;
+  height: 60px;
+  flex: 0 0 auto;
+  border-radius: 12px;
+  background: #f2f5ed;
+  color: #365a46;
+  stroke-width: 2.1;
+}
+.exercise-art .figure-body {
+  stroke: currentColor;
+  stroke-width: 4;
+}
+.exercise-art .figure-equipment {
+  stroke: #92a18a;
+  stroke-width: 2;
+}
+.exercise-art.group-pull {
+  background: #eef3f5;
+  color: #426875;
+}
+.exercise-art.group-legs {
+  background: #f7f1e7;
+  color: #8a6946;
+}
+.exercise-art.group-core {
+  background: #f2eff7;
+  color: #746083;
+}
+.exercise-top > .exercise-art {
+  width: 62px;
+  height: 48px;
+}
+.exercise-top > div:not(.small-symbol) {
+  min-width: 0;
+}
+.exercise-picker-copy {
+  flex: 1;
+  min-width: 0;
+}
+.exercise-picker-copy small {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+  margin-top: 5px;
+}
+.movement-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 14px 0;
+}
+.movement-filters .filter {
+  min-height: 38px;
+}
+.exercise-browser-list {
+  max-height: 390px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.movement-heading {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 12px 4px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 14px;
+}
+.movement-heading span {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 400;
+  margin-top: 4px;
+}
+.routine-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 20px;
+}
+.routine-draft {
+  max-height: 310px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.routine-draft-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.routine-draft-row > .exercise-art {
+  width: 62px;
+  height: 50px;
+}
+.routine-draft-copy {
+  flex: 1;
+  min-width: 0;
+}
+.routine-draft-copy > strong {
+  display: block;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.routine-targets {
+  display: flex;
+  gap: 7px;
+  margin-top: 8px;
+}
+.routine-targets label {
+  font-size: 10px;
+  color: var(--muted);
+}
+.routine-targets input {
+  display: block;
+  width: 58px;
+  padding: 7px 5px;
+  margin-top: 4px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--ink);
+  background: #fff;
+}
+.routine-order {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.routine-order .icon-btn {
+  width: 28px;
+  height: 28px;
+}
+.routine-empty {
+  padding: 18px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+}
+dialog[open]:has(.routine-builder) {
+  display: flex;
+  flex-direction: column;
+  width: min(720px, calc(100% - 30px));
+  height: min(780px, 88dvh);
+  overflow: hidden;
+}
+dialog:has(.routine-builder) > .modal-header {
+  flex: 0 0 auto;
+  margin-bottom: 16px;
+}
+.routine-builder {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.routine-builder > .field,
+.routine-builder > .tabs,
+.routine-builder > .modal-footer {
+  flex: 0 0 auto;
+}
+.routine-builder-tabs {
+  margin: 15px 0;
+}
+.routine-builder-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.routine-builder-panel[hidden] {
+  display: none !important;
+}
+.routine-builder-panel .exercise-browser {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.routine-builder-panel .search,
+.routine-builder-panel .movement-filters {
+  flex: 0 0 auto;
+}
+.routine-builder-panel .exercise-browser-list,
+.routine-builder-panel .routine-draft {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+.routine-builder-panel > .help-text {
+  padding-top: 10px;
+}
+.routine-builder > .modal-footer {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.routine-message {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: #925f38;
+  margin-top: 10px;
+}
+.workout-header,
+[data-routine-card] {
+  scroll-margin-top: 24px;
+}
+.icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+@media (max-width: 720px), (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+  .exercise-picker {
+    gap: 10px;
+  }
+  .exercise-picker > .exercise-art {
+    width: 64px;
+    height: 54px;
+  }
+  .routine-draft-row > .exercise-art {
+    width: 48px;
+    height: 46px;
+  }
+  .routine-targets input {
+    width: 50px;
+  }
+  .routine-actions .btn {
+    flex: 1;
+  }
+  .movement-filters .filter {
+    flex: 1;
+    padding: 8px 10px;
+  }
+}
 .modal-header {
   display: flex;
   align-items: center;

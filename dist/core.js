@@ -40,6 +40,14 @@ export function completedSets(session) {
 export function sessionVolume(session) {
   return sum(completedSets(session), (s) => s.kg * s.reps);
 }
+export function routinePlan(exercises) {
+  return structuredClone(exercises).map((ex) => ({
+    ...ex,
+    sets: (ex.sets.length ? ex.sets : [{ kg: 0, reps: 10, rir: 2 }]).map(
+      (set) => ({ ...set, done: false }),
+    ),
+  }));
+}
 export function trainingDays(date, mode = "rolling") {
   return mode === "week"
     ? weekDays(date)
@@ -153,6 +161,27 @@ export function validState(s) {
       muscleNames.length,
     ) &&
       (!primary || list.length > 0));
+  const exerciseRecord = (e) =>
+    e &&
+    id(e.exerciseId) &&
+    text(e.name) &&
+    text(e.muscle) &&
+    (e.equipment === undefined || text(e.equipment)) &&
+    (e.movement === undefined ||
+      ["push", "pull", "legs", "core"].includes(e.movement)) &&
+    roles(e.primaryMuscles, true) &&
+    roles(e.secondaryMuscles) &&
+    array(
+      e.sets,
+      (t) =>
+        t &&
+        num(t.kg, 0, 1000) &&
+        num(t.reps, 1, 200) &&
+        Number.isInteger(t.reps) &&
+        (t.rir === "" || num(t.rir, 0, 10)) &&
+        typeof t.done === "boolean",
+      200,
+    );
   return Boolean(
     s?.version === 1 &&
       (s.onboardingComplete === undefined ||
@@ -203,30 +232,22 @@ export function validState(s) {
           typeof w.finished === "boolean" &&
           text(w.notes || "", 2000) &&
           num(w.feeling, 1, 5) &&
-          array(
-            w.exercises,
-            (e) =>
-              e &&
-              id(e.exerciseId) &&
-              text(e.name) &&
-              text(e.muscle) &&
-              roles(e.primaryMuscles, true) &&
-              roles(e.secondaryMuscles) &&
-              array(
-                e.sets,
-                (t) =>
-                  t &&
-                  num(t.kg, 0, 1000) &&
-                  num(t.reps, 1, 200) &&
-                  Number.isInteger(t.reps) &&
-                  (t.rir === "" || num(t.rir, 0, 10)) &&
-                  typeof t.done === "boolean",
-                200,
-              ),
-            100,
-          ),
+          array(w.exercises, exerciseRecord, 100),
         10000,
       ) &&
+      (s.routines === undefined ||
+        array(
+          s.routines,
+          (r) =>
+            r &&
+            id(r.id) &&
+            text(r.name, 100) &&
+            text(r.note || "", 2000) &&
+            array(r.exercises, exerciseRecord, 100) &&
+            r.exercises.length > 0 &&
+            r.exercises.every((ex) => ex.sets.length > 0),
+          500,
+        )) &&
       array(s.customFoods, food, 10000) &&
       array(s.favorites, id, 10000),
   );
