@@ -6,6 +6,9 @@ import {
   mealTotals,
   completedSets,
   sessionVolume,
+  exerciseLoadSuggestion,
+  kgToLb,
+  lbToKg,
   routinePlan,
   trainingStats,
   trainingDays,
@@ -470,55 +473,110 @@ function trainingPage() {
     tab === "volume"
       ? muscleOverview()
       : tab === "session"
-        ? `<div class="grid-2 workout-grid"><article class="card">${session ? sessionEditor(session) : empty("Tu próxima sesión empieza aquí.", "Elige una rutina o crea una sesión con tus ejercicios.", "new-session", "Crear sesión", "dumbbell")}</article><div>${muscleVolumeCard()}<article class="card spacer-top"><h3>Entrena con contexto</h3><p class="help-text" style="margin-top:13px">El RIR registra cuántas repeticiones crees que podrías haber hecho al terminar una serie. 0 = ninguna más.</p><p class="help-text" style="margin-top:10px">Marca ${icon("check").replace('class="icon', 'style="display:inline;width:12px;height:12px" class="icon')} cada serie al completarla. El volumen suma peso × repeticiones de las series realizadas. En ejercicios con peso corporal registra solo la carga añadida.</p><p class="help-text" style="margin-top:10px">Cada ejercicio puede sumar series directas e indirectas a distintos músculos. Puedes editar esa distribución con el botón de músculos de cada ejercicio.</p></article></div></div>`
+        ? `<div class="grid-2 workout-grid"><article class="card">${session ? sessionEditor(session) : empty("Tu próxima sesión empieza aquí.", "Elige una rutina o crea una sesión con tus ejercicios.", "new-session", "Crear sesión", "dumbbell")}</article><div>${muscleVolumeCard()}<article class="card spacer-top"><h3>Entrena con contexto</h3><p class="help-text" style="margin-top:13px">El RIR registra cuántas repeticiones crees que podrías haber hecho al terminar una serie. 0 = ninguna más. Si lo dejas vacío, se cuenta como 0 (al fallo).</p><p class="help-text" style="margin-top:10px">Desliza el selector de peso, repeticiones o RIR para ajustarlo. Una serie queda hecha al elegir las repeticiones. El volumen suma carga × repeticiones de las series registradas. En ejercicios con peso corporal registra solo la carga añadida.</p><p class="help-text" style="margin-top:10px">Cada ejercicio puede sumar series directas e indirectas a distintos músculos. Puedes editar esa distribución con el botón de músculos de cada ejercicio.</p></article></div></div>`
         : tab === "routines"
           ? routinesPage()
           : historyPage()
   }`;
 }
 function sessionEditor(s) {
-  return `<div class="workout-header"><div><h2>${esc(s.name)}</h2><p class="subtitle" style="font-size:10px;margin-top:5px">${dateLabel(s.date, { weekday: "long", day: "numeric", month: "long" })} · ${s.finished ? "Sesión completada" : "En curso"} · ${fmt(sessionVolume(s))} kg de volumen</p></div><div>${iconButton("edit", "rename-session", "Cambiar nombre de sesión", `data-id="${s.id}"`)}${iconButton("trash", "delete-session", "Eliminar sesión", `data-id="${s.id}"`)}</div></div>${s.exercises
-    .map(
-      (ex, ei) =>
-        `<div class="exercise-card"><div class="exercise-top">${exerciseSvg(ex)}<div><h3>${esc(ex.name)}</h3><p>${esc(exerciseMuscles(ex).primary.join(" + "))} · ${lastPerformance(ex.exerciseId, s)}</p></div>${iconButton("target", "edit-exercise-muscles", "Editar músculos de " + ex.name, `data-session="${s.id}" data-ei="${ei}"`)}${iconButton("x", "remove-exercise", "Quitar ejercicio", `data-session="${s.id}" data-ei="${ei}"`)}</div><table class="set-table"><thead><tr><th>Serie</th><th>Peso kg</th><th>Reps</th><th>RIR</th><th>Hecha</th><th></th></tr></thead><tbody>${ex.sets
-          .map(
-            (set, si) =>
-              `<tr class="${set.done ? "completed" : ""}"><td>${si + 1}</td>${[
-                ["kg", "0", "1000", ".5"],
-                ["reps", "1", "200", "1"],
-                ["rir", "0", "10", "1"],
-              ]
-                .map(
-                  ([key, min, max, step]) =>
-                    `<td><input type="number" inputmode="decimal" data-set-field="${key}" data-session="${s.id}" data-ei="${ei}" data-si="${si}" aria-label="${key === "kg" ? "Peso en kg" : key === "reps" ? "Repeticiones" : "RIR"} de ${esc(ex.name)}, serie ${si + 1}" value="${set[key]}" min="${min}" max="${max}" step="${step}" ${key !== "rir" ? "required" : ""}></td>`,
-                )
-                .join(
-                  "",
-                )}<td><button class="check-set ${set.done ? "done" : ""}" data-action="toggle-set" data-session="${s.id}" data-ei="${ei}" data-si="${si}" aria-label="${set.done ? "Desmarcar" : "Completar"} serie ${si + 1}" aria-pressed="${set.done}">${icon("check")}</button></td><td><button class="remove-set" data-action="remove-set" data-session="${s.id}" data-ei="${ei}" data-si="${si}" aria-label="Eliminar serie ${si + 1}">${icon("x")}</button></td></tr>`,
-          )
-          .join(
-            "",
-          )}</tbody></table><button class="set-add" data-action="add-set" data-session="${s.id}" data-ei="${ei}">+ Añadir serie</button></div>`,
-    )
-    .join(
-      "",
-    )}${button("Añadir ejercicio", "add-exercise", "plus", "full", `data-id="${s.id}"`)}${s.exercises.length ? button("Guardar como rutina", "save-session-routine", "book", "full spacer-top", `data-id="${s.id}"`) : ""}<div class="field spacer-top"><label for="session-notes">Notas de la sesión</label><textarea id="session-notes" data-session="${s.id}" placeholder="¿Cómo te fue hoy? Sueño, energía, molestias…" maxlength="2000">${esc(s.notes || "")}</textarea></div><div class="workout-bottom"><div><p class="micro-label">¿Cómo te sentiste?</p><div class="feeling">${["😣", "😕", "😐", "🙂", "🤩"].map((emoji, i) => `<button class="${s.feeling === i + 1 ? "selected" : ""}" data-action="feeling" data-id="${s.id}" data-value="${i + 1}" aria-label="Sensación ${i + 1} de 5" aria-pressed="${s.feeling === i + 1}">${emoji}</button>`).join("")}</div></div>${button(s.finished ? "Reabrir sesión" : "Finalizar sesión", "finish-session", s.finished ? "edit" : "check", s.finished ? "" : "primary", `data-id="${s.id}"`)}</div>`;
+  return `<div class="workout-header">
+    <div>
+      <h2>${esc(s.name)}</h2>
+      <p class="subtitle" style="font-size:10px;margin-top:5px">${dateLabel(s.date, { weekday: "long", day: "numeric", month: "long" })} · ${s.finished ? "Sesión completada" : "En curso"} · ${fmt(sessionVolume(s))} kg de volumen</p>
+    </div>
+    <div>
+      ${iconButton("edit", "rename-session", "Cambiar nombre de sesión", `data-id="${s.id}"`)}
+      ${iconButton("trash", "delete-session", "Eliminar sesión", `data-id="${s.id}"`)}
+    </div>
+  </div>
+  ${s.exercises.map((ex, ei) => `
+    <div class="exercise-card">
+      <div class="exercise-top">
+        ${exerciseSvg(ex)}
+        <div>
+          <h3>${esc(ex.name)}</h3>
+          <p>${esc(exerciseMuscles(ex).primary.join(" + "))} · ${lastPerformance(ex.exerciseId, s)}</p>
+        </div>
+        ${iconButton("target", "edit-exercise-muscles", "Editar músculos de " + ex.name, `data-session="${s.id}" data-ei="${ei}"`)}
+        ${iconButton("x", "remove-exercise", "Quitar ejercicio", `data-session="${s.id}" data-ei="${ei}"`)}
+      </div>
+      <div class="set-list">
+        ${ex.sets.map((set, si) => `
+          <div class="set-entry ${set.done ? "completed" : ""}" data-set-row="${ei}-${si}">
+            <span class="set-number">
+              <span>${si + 1}</span>
+              <small data-set-status aria-label="${set.done ? "Serie hecha" : ""}">${set.done ? "✓" : ""}</small>
+            </span>
+            ${setControl(s, ex, ei, si, set, "kg")}
+            ${setControl(s, ex, ei, si, set, "reps")}
+            ${setControl(s, ex, ei, si, set, "rir")}
+            <button class="remove-set" data-action="remove-set" data-session="${s.id}" data-ei="${ei}" data-si="${si}" aria-label="Eliminar serie ${si + 1}">${icon("x")}</button>
+          </div>`).join("")}
+      </div>
+      <button class="set-add" data-action="add-set" data-session="${s.id}" data-ei="${ei}">+ Añadir serie</button>
+    </div>`).join("")}
+  ${button("Añadir ejercicio", "add-exercise", "plus", "full", `data-id="${s.id}"`)}
+  ${s.exercises.length ? button("Guardar como rutina", "save-session-routine", "book", "full spacer-top", `data-id="${s.id}"`) : ""}
+  <div class="field spacer-top">
+    <label for="session-notes">Notas de la sesión</label>
+    <textarea id="session-notes" data-session="${s.id}" placeholder="¿Cómo te fue hoy? Sueño, energía, molestias…" maxlength="2000">${esc(s.notes || "")}</textarea>
+  </div>
+  <div class="workout-bottom">
+    <div>
+      <p class="micro-label">¿Cómo te sentiste?</p>
+      <div class="feeling">${["😣", "😕", "😐", "🙂", "🤩"].map((emoji, i) => `<button class="${s.feeling === i + 1 ? "selected" : ""}" data-action="feeling" data-id="${s.id}" data-value="${i + 1}" aria-label="Sensación ${i + 1} de 5" aria-pressed="${s.feeling === i + 1}">${emoji}</button>`).join("")}</div>
+    </div>
+    ${button(s.finished ? "Reabrir sesión" : "Finalizar sesión", "finish-session", s.finished ? "edit" : "check", s.finished ? "" : "primary", `data-id="${s.id}"`)}
+  </div>`;
+}
+function setControl(session, exercise, exerciseIndex, setIndex, set, field) {
+  const unit = set.unit === "lb" ? "lb" : "kg";
+  const load = field === "kg";
+  const value = load
+    ? unit === "lb" ? Math.round(kgToLb(set.kg)) : Math.round(set.kg * 2) / 2
+    : set[field];
+  const emptyValue = value === "" || value == null;
+  const step = load ? unit === "lb" ? 1 : 0.5 : 1;
+  const minimum = load ? 0 : field === "reps" ? 1 : 0;
+  const maximum = load ? unit === "lb" ? 2200 : 1000 : field === "reps" ? 200 : 10;
+  const previous = emptyValue
+    ? "—"
+    : load
+      ? fmt(Math.max(minimum, value - step), unit === "kg" ? 1 : 0)
+      : value <= minimum
+        ? "—"
+        : fmt(value - step);
+  const next = emptyValue
+    ? field === "rir" ? "0" : field === "reps" ? "1" : "—"
+    : fmt(Math.min(maximum, value + step), load && unit === "kg" ? 1 : 0);
+  const label = load ? `Peso en ${unit}` : field === "reps" ? "Reps" : "RIR";
+  const shown = emptyValue
+    ? "Sin registrar"
+    : `${fmt(value, load && unit === "kg" && !Number.isInteger(value) ? 1 : 0)}${load ? ` ${unit}` : field === "rir" ? " RIR" : " repeticiones"}`;
+  const ariaNow = emptyValue ? "" : `aria-valuenow="${value}"`;
+  return `<div class="set-measure ${load ? "set-load" : ""}"><div class="measure-label">${load ? "Carga" : label}</div>${load ? `<div class="unit-switch" role="group" aria-label="Unidad para la serie ${setIndex + 1}"><button type="button" data-set-unit="kg" data-session="${session.id}" data-ei="${exerciseIndex}" data-si="${setIndex}" aria-pressed="${unit === "kg"}">kg</button><button type="button" data-set-unit="lb" data-session="${session.id}" data-ei="${exerciseIndex}" data-si="${setIndex}" aria-pressed="${unit === "lb"}">lb</button></div>` : `<div class="unit-switch-placeholder" aria-hidden="true"></div>`}<div class="set-wheel" data-wheel data-field="${field}" data-unit="${unit}" data-session="${session.id}" data-ei="${exerciseIndex}" data-si="${setIndex}" role="spinbutton" tabindex="0" aria-label="${label}, serie ${setIndex + 1} de ${esc(exercise.name)}" aria-valuemin="${minimum}" aria-valuemax="${maximum}" ${ariaNow} aria-valuetext="${shown}" aria-keyshortcuts="ArrowUp ArrowDown PageUp PageDown"><div class="wheel-neighbor" data-wheel-step="-1" aria-hidden="true">${previous}</div><div class="wheel-current" data-wheel-step="0" aria-hidden="true">${emptyValue ? "—" : fmt(value, load && unit === "kg" && !Number.isInteger(value) ? 1 : 0)}</div><div class="wheel-neighbor" data-wheel-step="1" aria-hidden="true">${next}</div></div></div>`;
 }
 function lastPerformance(id, current) {
-  const prior = state.sessions
-    .filter(
-      (s) =>
-        s.id !== current.id &&
-        s.date < current.date &&
-        s.finished &&
-        s.exercises.some((e) => e.exerciseId === id),
-    )
-    .sort((a, b) => b.date.localeCompare(a.date))[0];
-  const ex = prior?.exercises.find((e) => e.exerciseId === id);
-  const sets = ex?.sets.filter((s) => s.done);
-  return sets?.length
-    ? `Anterior: ${fmt(sets[0].kg)} kg × ${sets[0].reps}`
-    : "Sin sesión anterior";
+  const item = exerciseCatalog().find((exercise) => exercise.id === id);
+  const suggestion = exerciseLoadSuggestion(state.sessions, id, current.date, item?.equipment || "");
+  const unit = recentExerciseUnit(id, current.date);
+  const value = unit === "lb" ? kgToLb(suggestion.kg) : suggestion.kg;
+  const formatted = fmt(value, unit === "kg" && !Number.isInteger(value) ? 1 : 0);
+  return suggestion.source === "history"
+    ? `Media últimos 14 días: ${formatted} ${unit}`
+    : `Carga inicial orientativa: ${formatted} ${unit}`;
+}
+function recentExerciseUnit(id, date) {
+  const sessions = state.sessions.filter((session) => session.date <= date)
+    .sort((a, b) => b.date.localeCompare(a.date));
+  for (const session of sessions) {
+    const exercise = session.exercises.find((item) => item.exerciseId === id);
+    const set = exercise?.sets.slice().reverse()
+      .find((item) => item.done && ["kg", "lb"].includes(item.unit));
+    if (set) return set.unit;
+  }
+  return "kg";
 }
 function muscleVolumeCard() {
   const stats = currentTrainingStats();
@@ -806,19 +864,6 @@ function bindPage() {
     s.notes = e.target.value;
     persist();
   });
-  document.querySelectorAll("[data-set-field]").forEach((input) =>
-    input.addEventListener("change", (e) => {
-      const t = e.target;
-      if (!t.reportValidity()) {
-        render();
-        return;
-      }
-      const s = state.sessions.find((s) => s.id === t.dataset.session);
-      s.exercises[+t.dataset.ei].sets[+t.dataset.si][t.dataset.setField] =
-        t.value === "" && t.dataset.setField === "rir" ? "" : Number(t.value);
-      save();
-    }),
-  );
   bindGoals();
   $("#import-file")?.addEventListener("change", importFile);
 }
@@ -1129,8 +1174,10 @@ function startSession(routine = null) {
     });
   if (!routine) exerciseModal(session.id);
 }
-function makeExercise(ex) {
+function makeExercise(ex, date = selectedDate) {
   const roles = exerciseMuscles(ex);
+  const load = exerciseLoadSuggestion(state.sessions, ex.id, date, ex.equipment);
+  const unit = recentExerciseUnit(ex.id, date);
   return {
     exerciseId: ex.id,
     equipment: ex.equipment || "Personalizado",
@@ -1140,9 +1187,10 @@ function makeExercise(ex) {
     primaryMuscles: roles.primary,
     secondaryMuscles: roles.secondary,
     sets: Array.from({ length: 3 }, () => ({
-      kg: 0,
-      reps: 10,
-      rir: 2,
+      kg: load.kg,
+      unit,
+      reps: "",
+      rir: "",
       done: false,
     })),
   };
@@ -1256,7 +1304,7 @@ function exerciseModal(sessionId) {
     const session = state.sessions.find((s) => s.id === sessionId);
     if (session.exercises.length >= 100)
       return toast("Esta sesión ya tiene 100 ejercicios.");
-    session.exercises.push(makeExercise(ex));
+    session.exercises.push(makeExercise(ex, session.date));
     closeModal();
     save("Ejercicio añadido a tu sesión.");
   });
@@ -1270,7 +1318,7 @@ function routineModal(routine = null, session = null) {
   openModal(
     routine?.id ? "Editar rutina" : "Crear tu rutina",
     "Combina patrones y ordena los ejercicios a tu manera.",
-    `<div class="routine-builder"><div class="field"><label for="routine-name">Nombre de la rutina</label><input id="routine-name" maxlength="100" required placeholder="Ej. Empuje A" value="${esc(routine?.name || session?.name || "")}"></div><div class="tabs routine-builder-tabs" role="tablist" aria-label="Editor de rutina"><button type="button" class="tab ${draft.length ? "" : "active"}" role="tab" aria-selected="${!draft.length}" data-routine-panel="browse">Explorar ejercicios</button><button type="button" class="tab ${draft.length ? "active" : ""}" role="tab" aria-selected="${!!draft.length}" data-routine-panel="selection" id="routine-selection-tab">Mi selección (${draft.length})</button></div><div class="routine-builder-panel" data-routine-pane="browse" ${draft.length ? "hidden" : ""}>${exerciseBrowserMarkup()}</div><div class="routine-builder-panel" data-routine-pane="selection" ${draft.length ? "" : "hidden"}><div id="routine-draft" class="routine-draft"></div><p class="help-text">Ajusta el orden, las series y los objetivos de reps y RIR. En la sesión podrás editar cada serie.</p></div><p id="routine-message" class="routine-message" role="status" aria-live="polite" hidden></p><div class="modal-footer"><button type="button" class="btn" data-action="close">Cancelar</button><button type="button" class="btn primary" id="save-routine">${icon("check")}Guardar rutina</button></div></div>`,
+    `<div class="routine-builder"><div class="field"><label for="routine-name">Nombre de la rutina</label><input id="routine-name" maxlength="100" required placeholder="Ej. Empuje A" value="${esc(routine?.name || session?.name || "")}"></div><div class="tabs routine-builder-tabs" role="tablist" aria-label="Editor de rutina"><button type="button" class="tab ${draft.length ? "" : "active"}" role="tab" aria-selected="${!draft.length}" data-routine-panel="browse">Explorar ejercicios</button><button type="button" class="tab ${draft.length ? "active" : ""}" role="tab" aria-selected="${!!draft.length}" data-routine-panel="selection" id="routine-selection-tab">Mi selección (${draft.length})</button></div><div class="routine-builder-panel" data-routine-pane="browse" ${draft.length ? "hidden" : ""}>${exerciseBrowserMarkup()}</div><div class="routine-builder-panel" data-routine-pane="selection" ${draft.length ? "" : "hidden"}><div id="routine-draft" class="routine-draft"></div><p class="help-text">Ajusta el orden y las series; los objetivos de reps y RIR son opcionales. En la sesión podrás editar cada serie.</p></div><p id="routine-message" class="routine-message" role="status" aria-live="polite" hidden></p><div class="modal-footer"><button type="button" class="btn" data-action="close">Cancelar</button><button type="button" class="btn primary" id="save-routine">${icon("check")}Guardar rutina</button></div></div>`,
   );
   document.querySelectorAll("[data-routine-panel]").forEach((button) =>
     button.addEventListener("click", () => {
@@ -1304,7 +1352,7 @@ function routineModal(routine = null, session = null) {
               ]
                 .map(
                   ([field, label, value, min, max]) =>
-                    `<label>${label}<input type="number" inputmode="numeric" data-routine-field="${field}" data-index="${i}" aria-label="${label} de ${esc(ex.name)}" min="${min}" max="${max}" step="1" value="${value}" ${field !== "rir" ? "required" : ""}></label>`,
+                    `<label>${label}<input type="number" inputmode="numeric" data-routine-field="${field}" data-index="${i}" aria-label="${label} de ${esc(ex.name)}" min="${min}" max="${max}" step="1" value="${value}" ${field === "sets" ? "required" : ""}></label>`,
                 )
                 .join(
                   "",
@@ -1345,7 +1393,7 @@ function routineModal(routine = null, session = null) {
     const ex = draft[Number(input.dataset.index)],
       field = input.dataset.routineField;
     const value =
-      input.value === "" && field === "rir" ? "" : Number(input.value);
+      input.value === "" && field !== "sets" ? "" : Number(input.value);
     if (field === "sets")
       ex.sets = Array.from({ length: value }, (_, i) => ({
         ...(ex.sets[i] || ex.sets.at(-1)),
@@ -1514,6 +1562,159 @@ async function importFile(e) {
     e.target.value = "";
   }
 }
+function wheelSet(wheel) {
+  return state.sessions.find((session) => session.id === wheel.dataset.session)
+    ?.exercises[+wheel.dataset.ei]?.sets[+wheel.dataset.si];
+}
+function wheelValue(field, set, unit) {
+  if (field !== "kg") return set[field];
+  return unit === "lb" ? Math.round(kgToLb(set.kg)) : Math.round(set.kg * 2) / 2;
+}
+function paintWheel(wheel) {
+  const set = wheelSet(wheel);
+  if (!set) return;
+  const { field, unit } = wheel.dataset;
+  const current = wheelValue(field, set, unit);
+  const emptyValue = current === "" || current == null;
+  const step = field === "kg" ? unit === "lb" ? 1 : 0.5 : 1;
+  const min = field === "kg" ? 0 : field === "reps" ? 1 : 0;
+  const max = field === "kg" ? unit === "lb" ? 2200 : 1000 : field === "reps" ? 200 : 10;
+  const show = (value) => {
+    if (value === "" || value == null) return "—";
+    return fmt(value, field === "kg" && unit === "kg" && !Number.isInteger(value) ? 1 : 0);
+  };
+  const previous = emptyValue ? "—" : field === "kg"
+    ? show(Math.max(min, current - step))
+    : current <= min ? "—" : show(current - step);
+  const next = emptyValue ? field === "reps" ? "1" : field === "rir" ? "0" : "—"
+    : show(Math.min(max, current + step));
+  wheel.querySelector('[data-wheel-step="-1"]').textContent = previous;
+  wheel.querySelector('[data-wheel-step="0"]').textContent = show(current);
+  wheel.querySelector('[data-wheel-step="1"]').textContent = next;
+  const measure = field === "kg" ? unit : field === "reps" ? "repeticiones" : "RIR";
+  wheel.setAttribute("aria-valuetext", emptyValue ? "Sin registrar" : `${show(current)} ${measure}`);
+  if (emptyValue) wheel.removeAttribute("aria-valuenow");
+  else wheel.setAttribute("aria-valuenow", current);
+  const row = wheel.closest(".set-entry");
+  row.classList.toggle("completed", set.done);
+  const status = row.querySelector("[data-set-status]");
+  status.textContent = set.done ? "✓" : "";
+  status.setAttribute("aria-label", set.done ? "Serie hecha" : "");
+}
+function changeWheel(wheel, direction) {
+  const set = wheelSet(wheel);
+  if (!set) return false;
+  const field = wheel.dataset.field;
+  if (direction === 0) {
+    if (field !== "reps" || set.reps === "" || set.reps == null || set.done) return false;
+    set.done = true;
+    paintWheel(wheel);
+    return true;
+  }
+  const unit = wheel.dataset.unit;
+  const current = wheelValue(field, set, unit);
+  if (field === "kg") {
+    const step = unit === "lb" ? 1 : 0.5;
+    const max = unit === "lb" ? 2200 : 1000;
+    const next = Math.min(max, Math.max(0, (current || 0) + direction * step));
+    set.kg = unit === "lb" ? lbToKg(next) : next;
+  } else {
+    const min = field === "reps" ? 1 : 0;
+    const max = field === "reps" ? 200 : 10;
+    let next = emptyWheelValue(current) ? (direction > 0 ? min : "") : current + direction;
+    if (next !== "" && next < min) next = "";
+    if (next !== "") next = Math.min(max, next);
+    set[field] = next;
+    if (field === "reps") set.done = next !== "";
+  }
+  paintWheel(wheel);
+  return true;
+}
+function emptyWheelValue(value) {
+  return value === "" || value == null;
+}
+let wheelGesture = null;
+let wheelClickBlockedUntil = 0;
+document.addEventListener("pointerdown", (event) => {
+  const wheel = event.target.closest("[data-wheel]");
+  if (!wheel || event.button !== 0) return;
+  wheelGesture = { wheel, pointerId: event.pointerId, y: event.clientY, remainder: 0, moved: false, changed: false };
+  wheel.setPointerCapture?.(event.pointerId);
+});
+document.addEventListener("pointermove", (event) => {
+  if (!wheelGesture || event.pointerId !== wheelGesture.pointerId) return;
+  const gesture = wheelGesture;
+  gesture.remainder += gesture.y - event.clientY;
+  gesture.y = event.clientY;
+  while (Math.abs(gesture.remainder) >= 18) {
+    const direction = gesture.remainder > 0 ? 1 : -1;
+    gesture.changed = changeWheel(gesture.wheel, direction) || gesture.changed;
+    gesture.moved = true;
+    gesture.remainder -= direction * 18;
+  }
+  if (gesture.moved) event.preventDefault();
+});
+document.addEventListener("pointerup", (event) => {
+  if (!wheelGesture || event.pointerId !== wheelGesture.pointerId) return;
+  const gesture = wheelGesture;
+  wheelGesture = null;
+  if (gesture.moved) wheelClickBlockedUntil = performance.now() + 350;
+  if (gesture.changed) save();
+});
+document.addEventListener("pointercancel", () => {
+  if (!wheelGesture) return;
+  const gesture = wheelGesture;
+  wheelGesture = null;
+  if (gesture.changed) save();
+});
+document.addEventListener("keydown", (event) => {
+  const wheel = event.target.closest("[data-wheel]");
+  if (!wheel) return;
+  const directions = { ArrowUp: 1, ArrowDown: -1, PageUp: 10, PageDown: -10, Home: "min", End: "max", Enter: 0, " ": 0 };
+  if (!(event.key in directions)) return;
+  event.preventDefault();
+  const direction = directions[event.key];
+  if (direction === "min" || direction === "max") {
+    const field = wheel.dataset.field, unit = wheel.dataset.unit;
+    const target = direction === "min"
+      ? field === "kg" ? 0 : field === "reps" ? 1 : 0
+      : field === "kg" ? unit === "lb" ? 2200 : 1000 : field === "reps" ? 200 : 10;
+    const set = wheelSet(wheel);
+    if (field === "kg") set.kg = unit === "lb" ? lbToKg(target) : target;
+    else set[field] = target;
+    if (field === "reps") set.done = true;
+    paintWheel(wheel);
+    save();
+    return;
+  }
+  if (!changeWheel(wheel, direction)) return;
+  save();
+});
+document.addEventListener("wheel", (event) => {
+  const wheel = event.target.closest("[data-wheel]");
+  if (!wheel || !event.deltaY) return;
+  event.preventDefault();
+  if (changeWheel(wheel, event.deltaY < 0 ? 1 : -1)) save();
+}, { passive: false });
+document.addEventListener("click", (event) => {
+  const unitButton = event.target.closest("[data-set-unit]");
+  if (unitButton) {
+    const set = state.sessions.find((session) => session.id === unitButton.dataset.session)
+      ?.exercises[+unitButton.dataset.ei]?.sets[+unitButton.dataset.si];
+    if (!set) return;
+    set.unit = unitButton.dataset.setUnit;
+    save();
+    return;
+  }
+  const wheelStep = event.target.closest("[data-wheel-step]");
+  if (wheelStep) {
+    if (performance.now() < wheelClickBlockedUntil) return;
+    const wheel = wheelStep.closest("[data-wheel]");
+    if (wheel && changeWheel(wheel, Number(wheelStep.dataset.wheelStep))) save();
+    return;
+  }
+});
+
 document.addEventListener("click", (e) => {
   const period = e.target.closest("[data-training-window]");
   if (period) {
@@ -1742,7 +1943,7 @@ document.addEventListener("click", (e) => {
       const s = state.sessions.find((s) => s.id === d.session),
         ex = s.exercises[+d.ei];
       ex.sets.push({
-        ...(ex.sets.at(-1) || { kg: 0, reps: 10, rir: 2 }),
+        ...(ex.sets.at(-1) || { kg: 0, unit: "kg", reps: "", rir: "" }),
         done: false,
       });
       save();
@@ -1753,13 +1954,6 @@ document.addEventListener("click", (e) => {
         +d.ei
       ];
       ex.sets.splice(+d.si, 1);
-      save();
-      break;
-    }
-    case "toggle-set": {
-      const s = state.sessions.find((s) => s.id === d.session),
-        set = s.exercises[+d.ei].sets[+d.si];
-      set.done = !set.done;
       save();
       break;
     }

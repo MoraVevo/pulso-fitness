@@ -1123,65 +1123,137 @@ svg {
   border: 0;
   background: transparent;
 }
-.set-table {
-  width: 100%;
-  border-collapse: collapse;
+.set-list {
+  padding: 9px 9px 5px;
 }
-.set-table th {
+.set-entry {
+  display: grid;
+  grid-template-columns: 34px minmax(88px, 1.2fr) minmax(66px, 0.9fr) minmax(58px, 0.8fr) 42px;
+  align-items: center;
+  gap: 6px;
+}
+.set-entry {
+  padding: 8px 5px;
+  border-radius: 12px;
+  transition: background 120ms ease;
+}
+.set-entry.completed {
+  background: var(--soft);
+}
+.set-number {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.set-number small {
+  min-height: 10px;
+  color: var(--green);
+  font-size: 10px;
+  line-height: 10px;
+}
+.set-measure {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+.measure-label {
+  overflow: hidden;
+  color: var(--muted);
   font-size: 9px;
-  color: var(--muted);
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-  padding: 12px 8px;
-}
-.set-table td {
+  line-height: 12px;
   text-align: center;
-  padding: 7px 8px;
-  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.set-table td:first-child {
-  color: var(--muted);
-  width: 45px;
+.unit-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  min-height: 34px;
+  padding: 2px;
+  border-radius: 8px;
+  background: #f0f2ed;
 }
-.set-table input {
-  width: 65px;
-  border: 1px solid var(--line);
+.unit-switch button {
+  min-width: 0;
+  min-height: 30px;
+  padding: 2px 3px;
+  border: 0;
   border-radius: 6px;
-  text-align: center;
-  padding: 7px 2px;
-  background: #fcfdf9;
+  background: transparent;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+.unit-switch button[aria-pressed="true"] {
+  background: var(--paper);
+  color: var(--green);
+  box-shadow: 0 1px 2px #263b3214;
+}
+.unit-switch-placeholder {
+  min-height: 34px;
+}
+.set-wheel {
+  display: flex;
+  min-height: 82px;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: #fbfcf9;
   color: var(--ink);
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
-.set-table tr.completed {
-  background: #f3f7ed;
+.set-wheel:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
 }
-.check-set {
-  border: 1px solid #dde5d4;
-  background: #fff;
-  border-radius: 7px;
-  height: 29px;
-  width: 29px;
-  display: inline-grid;
+.wheel-neighbor,
+.wheel-current {
+  display: grid;
+  flex: 1;
   place-items: center;
+  text-align: center;
 }
-.check-set.done {
-  background: var(--green);
-  color: #fff;
-  border-color: var(--green);
+.wheel-neighbor {
+  color: var(--muted);
+  font-size: 10px;
+  opacity: 0.7;
 }
-.check-set .icon {
-  width: 13px;
-  height: 13px;
+.wheel-current {
+  min-height: 30px;
+  border-top: 1px solid #e8ece580;
+  border-bottom: 1px solid #e8ece580;
+  background: var(--paper);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1;
+}
+.set-entry.completed .wheel-current {
+  color: var(--green);
 }
 .set-add {
   margin: 12px 16px;
   width: calc(100% - 32px);
-  padding: 9px;
+  min-height: 44px;
+  padding: 10px;
   background: #f4f7ef;
   border: 0;
-  border-radius: 7px;
-  font-size: 11px;
+  border-radius: 10px;
+  font-size: 12px;
   color: #7b8c69;
 }
 .workout-bottom {
@@ -1950,10 +2022,20 @@ dialog:has(.routine-builder) > .modal-header {
   margin-top: 22px;
 }
 .remove-set {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
   border: 0;
   background: none;
   color: #a3a99b;
-  padding: 5px;
+  padding: 0;
+  border-radius: 10px;
+}
+.remove-set:focus-visible,
+.remove-set:hover {
+  background: #f4f5f1;
+  color: var(--ink);
 }
 .remove-set .icon {
   width: 12px;
@@ -2448,20 +2530,6 @@ dialog:has(.routine-builder) > .modal-header {
     display: flex;
     gap: 5px;
   }
-  .set-table td {
-    padding: 6px 3px;
-  }
-  .set-table th {
-    padding: 11px 3px;
-    font-size: 8px;
-  }
-  .set-table input {
-    width: 52px;
-    padding: 8px 2px;
-  }
-  .set-table td:first-child {
-    width: 30px;
-  }
   .workout-bottom {
     flex-wrap: wrap;
   }
@@ -2816,5 +2884,39 @@ dialog:has(.routine-builder) > .modal-header {
 @media (max-width: 1000px) {
   .workout-grid {
     grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 720px) {
+  .set-list {
+    padding: 8px 5px 4px;
+  }
+  .set-entry {
+    grid-template-columns: 28px minmax(64px, 1.15fr) minmax(42px, 0.8fr) minmax(38px, 0.7fr) 36px;
+    gap: 3px;
+  }
+  .set-entry {
+    padding: 7px 3px;
+  }
+  .set-wheel {
+    min-height: 78px;
+    border-radius: 9px;
+  }
+  .wheel-current {
+    min-height: 28px;
+    font-size: 16px;
+  }
+  .unit-switch {
+    gap: 1px;
+  }
+  .unit-switch button {
+    font-size: 9px;
+  }
+  .remove-set {
+    width: 36px;
+    height: 40px;
+  }
+  .set-add {
+    margin: 10px 10px;
+    width: calc(100% - 20px);
   }
 }

@@ -40,10 +40,61 @@ export function completedSets(session) {
 export function sessionVolume(session) {
   return sum(completedSets(session), (s) => s.kg * s.reps);
 }
+const LB_PER_KG = 2.2046226218487757;
+export const kgToLb = (kg) => kg * LB_PER_KG;
+export const lbToKg = (lb) => lb / LB_PER_KG;
+
+const starterLoadsKg = {
+  bench: 20, "machine-press": 10, "dumbbell-press": 8,
+  incline: 6, "incline-barbell": 20, "incline-machine": 10,
+  "smith-press": 20, "decline-press": 20, pushup: 0, "incline-pushup": 0,
+  fly: 5, "pec-deck": 10, "cable-fly": 7, dips: 0,
+  pulldown: 15, "neutral-pulldown": 15, row: 20, "cable-row": 12,
+  "machine-row": 12, "dumbbell-row": 10, "chest-supported-row": 8,
+  pullup: 0, chinup: 0, pullover: 10,
+  squat: 20, "front-squat": 20, "goblet-squat": 8, "hack-squat": 15,
+  legpress: 20, extension: 10, lunge: 8, bulgarian: 8, "step-up": 8,
+  rdl: 20, "dumbbell-rdl": 10, legcurl: 10, "seated-legcurl": 10,
+  deadlift: 20, hipthrust: 20, "machine-hipthrust": 15, kickback: 5,
+  abduction: 10, adduction: 10,
+  ohp: 15, "dumbbell-ohp": 6, "machine-ohp": 10, lateral: 4,
+  "cable-lateral": 3, "rear-delt": 4, "reverse-pec-deck": 8,
+  facepull: 7, shrug: 10, curl: 5, "barbell-curl": 10, hammer: 5,
+  "preacher-curl": 8, "cable-curl": 7, triceps: 7, overhead: 5,
+  skullcrusher: 8, "close-grip-press": 15, crunch: 0, cablecrunch: 10,
+  "leg-raise": 0, "ab-wheel": 0, calf: 10, "seated-calf": 10,
+  "wrist-curl": 3,
+};
+
+export function exerciseLoadSuggestion(sessions, exerciseId, date, equipment = "") {
+  const firstDay = shiftDate(date, -13);
+  const recentLoads = sessions
+    .filter((session) => session.date >= firstDay && session.date <= date)
+    .flatMap((session) => session.exercises || [])
+    .filter((exercise) => exercise.exerciseId === exerciseId)
+    .flatMap((exercise) => exercise.sets || [])
+    .filter((set) => set.done && Number.isFinite(set.kg));
+  if (recentLoads.length) {
+    const mean = sum(recentLoads, (set) => set.kg) / recentLoads.length;
+    return { kg: Math.round(mean * 2) / 2, source: "history" };
+  }
+  if (Object.hasOwn(starterLoadsKg, exerciseId))
+    return { kg: starterLoadsKg[exerciseId], source: "starter" };
+  if (/peso corporal|sin equipo|rueda/i.test(equipment))
+    return { kg: 0, source: "starter" };
+  if (/barra ez|barra z/i.test(equipment))
+    return { kg: 8, source: "starter" };
+  if (/barra/i.test(equipment)) return { kg: 15, source: "starter" };
+  if (/mancuerna/i.test(equipment)) return { kg: 5, source: "starter" };
+  if (/polea/i.test(equipment)) return { kg: 7, source: "starter" };
+  if (/máquina|maquina/i.test(equipment)) return { kg: 10, source: "starter" };
+  return { kg: 0, source: "starter" };
+}
+
 export function routinePlan(exercises) {
   return structuredClone(exercises).map((ex) => ({
     ...ex,
-    sets: (ex.sets.length ? ex.sets : [{ kg: 0, reps: 10, rir: 2 }]).map(
+    sets: (ex.sets.length ? ex.sets : [{ kg: 0, reps: "", rir: "" }]).map(
       (set) => ({ ...set, done: false }),
     ),
   }));
@@ -94,15 +145,13 @@ export function trainingStats(sessions, date, mode = "rolling") {
       }
     }
   }
-  const withRir = sets.filter(
-    (s) => s.rir !== "" && s.rir !== null && s.rir !== undefined,
-  );
   return {
     sessions: period.filter((s) => s.finished).length,
     sets: sets.length,
     volume: sum(sets, (s) => s.kg * s.reps),
-    rir: withRir.length
-      ? sum(withRir, (s) => Number(s.rir)) / withRir.length
+    rir: sets.length
+      ? sum(sets, (s) => Number(s.rir === "" || s.rir == null ? 0 : s.rir)) /
+        sets.length
       : null,
     muscles,
     muscleBreakdown,
@@ -176,9 +225,10 @@ export function validState(s) {
       (t) =>
         t &&
         num(t.kg, 0, 1000) &&
-        num(t.reps, 1, 200) &&
-        Number.isInteger(t.reps) &&
-        (t.rir === "" || num(t.rir, 0, 10)) &&
+        (t.reps === "" ||
+          (num(t.reps, 1, 200) && Number.isInteger(t.reps))) &&
+        (t.rir === "" || t.rir == null || num(t.rir, 0, 10)) &&
+        (t.unit === undefined || ["kg", "lb"].includes(t.unit)) &&
         typeof t.done === "boolean",
       200,
     );
