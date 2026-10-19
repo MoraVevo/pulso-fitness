@@ -473,7 +473,7 @@ function trainingPage() {
     tab === "volume"
       ? muscleOverview()
       : tab === "session"
-        ? `<div class="grid-2 workout-grid"><article class="card">${session ? sessionEditor(session) : empty("Tu próxima sesión empieza aquí.", "Elige una rutina o crea una sesión con tus ejercicios.", "new-session", "Crear sesión", "dumbbell")}</article><div>${muscleVolumeCard()}<article class="card spacer-top"><h3>Entrena con contexto</h3><p class="help-text" style="margin-top:13px">El RIR registra cuántas repeticiones crees que podrías haber hecho al terminar una serie. 0 = ninguna más. Si lo dejas vacío, se cuenta como 0 (al fallo).</p><p class="help-text" style="margin-top:10px">Desliza el selector de peso, repeticiones o RIR para ajustarlo. Una serie queda hecha al elegir las repeticiones. El volumen suma carga × repeticiones de las series registradas. En ejercicios con peso corporal registra solo la carga añadida.</p><p class="help-text" style="margin-top:10px">Cada ejercicio puede sumar series directas e indirectas a distintos músculos. Puedes editar esa distribución con el botón de músculos de cada ejercicio.</p></article></div></div>`
+        ? `<div class="grid-2 workout-grid"><article class="card">${session ? sessionEditor(session) : empty("Tu próxima sesión empieza aquí.", "Elige una rutina o crea una sesión con tus ejercicios.", "new-session", "Crear sesión", "dumbbell")}</article><div>${muscleVolumeCard()}<article class="card spacer-top"><h3>Entrena con contexto</h3><p class="help-text" style="margin-top:13px">El RIR registra cuántas repeticiones crees que podrías haber hecho al terminar una serie. 0 = ninguna más. Si lo dejas vacío, se cuenta como 0 (al fallo).</p><p class="help-text" style="margin-top:10px">Toca Carga, Reps o RIR para abrir la rueda y desliza hasta el valor. Una serie queda hecha al elegir las repeticiones. El volumen suma carga × repeticiones de las series registradas. En ejercicios con peso corporal registra solo la carga añadida.</p><p class="help-text" style="margin-top:10px">Cada ejercicio puede sumar series directas e indirectas a distintos músculos. Puedes editar esa distribución con el botón de músculos de cada ejercicio.</p></article></div></div>`
         : tab === "routines"
           ? routinesPage()
           : historyPage()
@@ -537,25 +537,146 @@ function setControl(session, exercise, exerciseIndex, setIndex, set, field) {
     ? unit === "lb" ? Math.round(kgToLb(set.kg)) : Math.round(set.kg * 2) / 2
     : set[field];
   const emptyValue = value === "" || value == null;
-  const step = load ? unit === "lb" ? 1 : 0.5 : 1;
-  const minimum = load ? 0 : field === "reps" ? 1 : 0;
-  const maximum = load ? unit === "lb" ? 2200 : 1000 : field === "reps" ? 200 : 10;
-  const previous = emptyValue
-    ? "—"
-    : load
-      ? fmt(Math.max(minimum, value - step), unit === "kg" ? 1 : 0)
-      : value <= minimum
-        ? "—"
-        : fmt(value - step);
-  const next = emptyValue
-    ? field === "rir" ? "0" : field === "reps" ? "1" : "—"
-    : fmt(Math.min(maximum, value + step), load && unit === "kg" ? 1 : 0);
-  const label = load ? `Peso en ${unit}` : field === "reps" ? "Reps" : "RIR";
-  const shown = emptyValue
-    ? "Sin registrar"
-    : `${fmt(value, load && unit === "kg" && !Number.isInteger(value) ? 1 : 0)}${load ? ` ${unit}` : field === "rir" ? " RIR" : " repeticiones"}`;
-  const ariaNow = emptyValue ? "" : `aria-valuenow="${value}"`;
-  return `<div class="set-measure ${load ? "set-load" : ""}"><div class="measure-label">${load ? "Carga" : label}</div>${load ? `<div class="unit-switch" role="group" aria-label="Unidad para la serie ${setIndex + 1}"><button type="button" data-set-unit="kg" data-session="${session.id}" data-ei="${exerciseIndex}" data-si="${setIndex}" aria-pressed="${unit === "kg"}">kg</button><button type="button" data-set-unit="lb" data-session="${session.id}" data-ei="${exerciseIndex}" data-si="${setIndex}" aria-pressed="${unit === "lb"}">lb</button></div>` : `<div class="unit-switch-placeholder" aria-hidden="true"></div>`}<div class="set-wheel" data-wheel data-field="${field}" data-unit="${unit}" data-session="${session.id}" data-ei="${exerciseIndex}" data-si="${setIndex}" role="spinbutton" tabindex="0" aria-label="${label}, serie ${setIndex + 1} de ${esc(exercise.name)}" aria-valuemin="${minimum}" aria-valuemax="${maximum}" ${ariaNow} aria-valuetext="${shown}" aria-keyshortcuts="ArrowUp ArrowDown PageUp PageDown"><div class="wheel-neighbor" data-wheel-step="-1" aria-hidden="true">${previous}</div><div class="wheel-current" data-wheel-step="0" aria-hidden="true">${emptyValue ? "—" : fmt(value, load && unit === "kg" && !Number.isInteger(value) ? 1 : 0)}</div><div class="wheel-neighbor" data-wheel-step="1" aria-hidden="true">${next}</div></div></div>`;
+  const label = load ? "Carga" : field === "reps" ? "Reps" : "RIR";
+  const shown = emptyValue ? "—" : `${fmt(value, load && unit === "kg" && !Number.isInteger(value) ? 1 : 0)}${load ? ` ${unit}` : ""}`;
+  return `<button class="set-picker-trigger" type="button" data-set-picker="${field}" data-session="${session.id}" data-ei="${exerciseIndex}" data-si="${setIndex}" aria-haspopup="dialog" aria-label="Seleccionar ${label.toLowerCase()}, serie ${setIndex + 1} de ${esc(exercise.name)}. Actual: ${emptyValue ? "sin registrar" : shown}">
+    <span class="measure-label">${label}</span>
+    <span class="set-picker-value">${shown}</span>
+  </button>`;
+}
+const SET_PICKER_ROW_HEIGHT = 44;
+let activeSetPicker = null;
+function setPickerValues(picker) {
+  if (picker.field === "kg") {
+    const max = picker.unit === "lb" ? 2200 : 1000;
+    const step = picker.unit === "lb" ? 1 : 0.5;
+    return Array.from({ length: Math.round(max / step) + 1 }, (_, index) => index * step);
+  }
+  const max = picker.field === "reps" ? 200 : 10;
+  return [null, ...Array.from({ length: max - (picker.field === "reps" ? 0 : -1) }, (_, index) => index + (picker.field === "reps" ? 1 : 0))];
+}
+function setPickerValue(picker) {
+  if (picker.field === "kg") {
+    return picker.unit === "lb" ? Math.round(kgToLb(picker.kg)) : Math.round(picker.kg * 2) / 2;
+  }
+  return picker.value;
+}
+function setPickerIndex(values, value) {
+  if (value == null || value === "") return values[0] === null ? 0 : -1;
+  const index = values.findIndex((item) => item !== null && Math.abs(item - Number(value)) < 0.001);
+  return index < 0 ? 0 : index;
+}
+function showSetPickerValue(picker, value) {
+  if (value == null) return "—";
+  if (picker.field === "kg") {
+    return fmt(value, picker.unit === "kg" && !Number.isInteger(value) ? 1 : 0);
+  }
+  return fmt(value);
+}
+function setPickerOptionMarkup(picker, values, centerIndex) {
+  const start = Math.max(0, centerIndex - 3);
+  const end = Math.min(values.length - 1, centerIndex + 3);
+  return Array.from({ length: end - start + 1 }, (_, offset) => {
+    const index = start + offset;
+    return `<div class="picker-option ${index === centerIndex ? "selected" : ""}" data-picker-option data-index="${index}" style="top:${88 + index * SET_PICKER_ROW_HEIGHT}px">${showSetPickerValue(picker, values[index])}</div>`;
+  }).join("");
+}
+function renderSetPickerWheel() {
+  const picker = activeSetPicker;
+  const content = $("#set-picker-content");
+  if (!picker || !content) return;
+  if (picker.settleTimer) clearTimeout(picker.settleTimer);
+  const generation = picker.renderGeneration = (picker.renderGeneration || 0) + 1;
+  const values = setPickerValues(picker);
+  const current = setPickerValue(picker);
+  const selectedIndex = Math.max(0, setPickerIndex(values, current));
+  const label = picker.field === "kg" ? "carga" : picker.field === "reps" ? "repeticiones" : "RIR";
+  const minimum = picker.field === "kg" ? 0 : picker.field === "reps" ? 1 : 0;
+  const maximum = picker.field === "kg" ? picker.unit === "lb" ? 2200 : 1000 : picker.field === "reps" ? 200 : 10;
+  const measure = picker.field === "kg" ? picker.unit === "lb" ? "libras" : "kilogramos" : picker.field === "reps" ? "repeticiones" : "RIR";
+  const activeText = current == null ? "Sin registrar" : `${showSetPickerValue(picker, current)} ${measure}`;
+  content.innerHTML = `${picker.field === "kg" ? `<div class="unit-switch picker-unit-switch" role="group" aria-label="Unidad de carga"><button type="button" data-picker-unit="kg" aria-pressed="${picker.unit === "kg"}">kg</button><button type="button" data-picker-unit="lb" aria-pressed="${picker.unit === "lb"}">lb</button></div>` : ""}
+    <div class="picker-window">
+      <div class="picker-highlight" aria-hidden="true"></div>
+      <div class="picker-wheel" data-set-picker-wheel data-selected-index="${selectedIndex}" role="spinbutton" tabindex="0" aria-label="Elige ${label}" aria-valuemin="${minimum}" aria-valuemax="${maximum}" ${current == null ? "" : `aria-valuenow="${current}"`} aria-valuetext="${activeText}">
+        <div class="picker-track" aria-hidden="true" style="height:${values.length * SET_PICKER_ROW_HEIGHT + 176}px">${setPickerOptionMarkup(picker, values, selectedIndex)}</div>
+      </div>
+    </div>
+    <p class="picker-hint">Desliza para elegir · el valor central queda seleccionado</p>`;
+  const wheel = $(`[data-set-picker-wheel]`, content);
+  wheel.scrollTop = selectedIndex * SET_PICKER_ROW_HEIGHT;
+  const syncSelection = () => {
+    if (activeSetPicker !== picker || picker.renderGeneration !== generation) return;
+    const nextIndex = Math.max(0, Math.min(values.length - 1, Math.round(wheel.scrollTop / SET_PICKER_ROW_HEIGHT)));
+    const previousIndex = Number(wheel.dataset.selectedIndex);
+    if (nextIndex === previousIndex) return;
+    wheel.querySelector(".picker-track").innerHTML = setPickerOptionMarkup(picker, values, nextIndex);
+    wheel.dataset.selectedIndex = String(nextIndex);
+    const value = values[nextIndex];
+    picker.dirtyValue = true;
+    if (picker.field === "kg") picker.kg = picker.unit === "lb" ? lbToKg(value) : value;
+    else picker.value = value;
+    if (value == null) wheel.removeAttribute("aria-valuenow");
+    else wheel.setAttribute("aria-valuenow", value);
+    const measure = picker.field === "kg" ? picker.unit === "lb" ? "libras" : "kilogramos" : picker.field === "reps" ? "repeticiones" : "RIR";
+    wheel.setAttribute("aria-valuetext", value == null ? "Sin registrar" : `${showSetPickerValue(picker, value)} ${measure}`);
+  };
+  const centerSelection = () => {
+    syncSelection();
+    wheel.scrollTop = Number(wheel.dataset.selectedIndex) * SET_PICKER_ROW_HEIGHT;
+  };
+  wheel.addEventListener("scroll", () => {
+    syncSelection();
+    clearTimeout(picker.settleTimer);
+    picker.settleTimer = setTimeout(centerSelection, 120);
+  }, { passive: true });
+  wheel.addEventListener("scrollend", centerSelection);
+  wheel.addEventListener("click", (event) => {
+    const option = event.target.closest("[data-picker-option]");
+    if (!option) return;
+    wheel.scrollTo({ top: Number(option.dataset.index) * SET_PICKER_ROW_HEIGHT, behavior: "smooth" });
+  });
+  requestAnimationFrame(() => { wheel.scrollTop = selectedIndex * SET_PICKER_ROW_HEIGHT; });
+}
+function openSetPicker(sessionId, exerciseIndex, setIndex, field) {
+  const session = state.sessions.find((item) => item.id === sessionId);
+  const exercise = session?.exercises[exerciseIndex];
+  const set = exercise?.sets[setIndex];
+  if (!session || !exercise || !set) return;
+  const load = field === "kg";
+  const label = load ? "Carga" : field === "reps" ? "Repeticiones" : "RIR";
+  activeSetPicker = {
+    sessionId,
+    exerciseIndex,
+    setIndex,
+    field,
+    unit: set.unit === "lb" ? "lb" : "kg",
+    kg: set.kg,
+    value: set[field] === "" || set[field] == null ? null : Number(set[field]),
+    originalKg: set.kg,
+    dirtyValue: false,
+  };
+  openModal(`${label} · serie ${setIndex + 1}`, esc(exercise.name), `<div class="set-picker-modal"><div id="set-picker-content"></div><div class="modal-footer"><button class="btn" type="button" data-set-picker-cancel>Cancelar</button><button class="btn primary" type="button" data-set-picker-save>Listo</button></div></div>`);
+  renderSetPickerWheel();
+}
+function commitSetPicker() {
+  const picker = activeSetPicker;
+  if (!picker) return;
+  const set = state.sessions.find((session) => session.id === picker.sessionId)
+    ?.exercises[picker.exerciseIndex]?.sets[picker.setIndex];
+  if (!set) return closeModal();
+  if (picker.field === "kg") {
+    set.unit = picker.unit;
+    set.kg = picker.dirtyValue
+      ? picker.unit === "lb" ? lbToKg(picker.kg) : picker.kg
+      : picker.originalKg;
+  } else {
+    set[picker.field] = picker.value == null ? "" : picker.value;
+    if (picker.field === "reps") set.done = picker.value != null;
+  }
+  activeSetPicker = null;
+  closeModal();
+  save();
 }
 function lastPerformance(id, current) {
   const item = exerciseCatalog().find((exercise) => exercise.id === id);
@@ -953,6 +1074,8 @@ function openModal(title, subtitle, body, { dismissible = true } = {}) {
 function closeModal() {
   modalCleanup();
   modalCleanup = () => {};
+  if (activeSetPicker?.settleTimer) clearTimeout(activeSetPicker.settleTimer);
+  activeSetPicker = null;
   $("#modal").close();
   $("#modal").innerHTML = "";
 }
@@ -1562,159 +1685,30 @@ async function importFile(e) {
     e.target.value = "";
   }
 }
-function wheelSet(wheel) {
-  return state.sessions.find((session) => session.id === wheel.dataset.session)
-    ?.exercises[+wheel.dataset.ei]?.sets[+wheel.dataset.si];
-}
-function wheelValue(field, set, unit) {
-  if (field !== "kg") return set[field];
-  return unit === "lb" ? Math.round(kgToLb(set.kg)) : Math.round(set.kg * 2) / 2;
-}
-function paintWheel(wheel) {
-  const set = wheelSet(wheel);
-  if (!set) return;
-  const { field, unit } = wheel.dataset;
-  const current = wheelValue(field, set, unit);
-  const emptyValue = current === "" || current == null;
-  const step = field === "kg" ? unit === "lb" ? 1 : 0.5 : 1;
-  const min = field === "kg" ? 0 : field === "reps" ? 1 : 0;
-  const max = field === "kg" ? unit === "lb" ? 2200 : 1000 : field === "reps" ? 200 : 10;
-  const show = (value) => {
-    if (value === "" || value == null) return "—";
-    return fmt(value, field === "kg" && unit === "kg" && !Number.isInteger(value) ? 1 : 0);
-  };
-  const previous = emptyValue ? "—" : field === "kg"
-    ? show(Math.max(min, current - step))
-    : current <= min ? "—" : show(current - step);
-  const next = emptyValue ? field === "reps" ? "1" : field === "rir" ? "0" : "—"
-    : show(Math.min(max, current + step));
-  wheel.querySelector('[data-wheel-step="-1"]').textContent = previous;
-  wheel.querySelector('[data-wheel-step="0"]').textContent = show(current);
-  wheel.querySelector('[data-wheel-step="1"]').textContent = next;
-  const measure = field === "kg" ? unit : field === "reps" ? "repeticiones" : "RIR";
-  wheel.setAttribute("aria-valuetext", emptyValue ? "Sin registrar" : `${show(current)} ${measure}`);
-  if (emptyValue) wheel.removeAttribute("aria-valuenow");
-  else wheel.setAttribute("aria-valuenow", current);
-  const row = wheel.closest(".set-entry");
-  row.classList.toggle("completed", set.done);
-  const status = row.querySelector("[data-set-status]");
-  status.textContent = set.done ? "✓" : "";
-  status.setAttribute("aria-label", set.done ? "Serie hecha" : "");
-}
-function changeWheel(wheel, direction) {
-  const set = wheelSet(wheel);
-  if (!set) return false;
-  const field = wheel.dataset.field;
-  if (direction === 0) {
-    if (field !== "reps" || set.reps === "" || set.reps == null || set.done) return false;
-    set.done = true;
-    paintWheel(wheel);
-    return true;
-  }
-  const unit = wheel.dataset.unit;
-  const current = wheelValue(field, set, unit);
-  if (field === "kg") {
-    const step = unit === "lb" ? 1 : 0.5;
-    const max = unit === "lb" ? 2200 : 1000;
-    const next = Math.min(max, Math.max(0, (current || 0) + direction * step));
-    set.kg = unit === "lb" ? lbToKg(next) : next;
-  } else {
-    const min = field === "reps" ? 1 : 0;
-    const max = field === "reps" ? 200 : 10;
-    let next = emptyWheelValue(current) ? (direction > 0 ? min : "") : current + direction;
-    if (next !== "" && next < min) next = "";
-    if (next !== "") next = Math.min(max, next);
-    set[field] = next;
-    if (field === "reps") set.done = next !== "";
-  }
-  paintWheel(wheel);
-  return true;
-}
-function emptyWheelValue(value) {
-  return value === "" || value == null;
-}
-let wheelGesture = null;
-let wheelClickBlockedUntil = 0;
-document.addEventListener("pointerdown", (event) => {
-  const wheel = event.target.closest("[data-wheel]");
-  if (!wheel || event.button !== 0) return;
-  wheelGesture = { wheel, pointerId: event.pointerId, y: event.clientY, remainder: 0, moved: false, changed: false };
-  wheel.setPointerCapture?.(event.pointerId);
-});
-document.addEventListener("pointermove", (event) => {
-  if (!wheelGesture || event.pointerId !== wheelGesture.pointerId) return;
-  const gesture = wheelGesture;
-  gesture.remainder += gesture.y - event.clientY;
-  gesture.y = event.clientY;
-  while (Math.abs(gesture.remainder) >= 18) {
-    const direction = gesture.remainder > 0 ? 1 : -1;
-    gesture.changed = changeWheel(gesture.wheel, direction) || gesture.changed;
-    gesture.moved = true;
-    gesture.remainder -= direction * 18;
-  }
-  if (gesture.moved) event.preventDefault();
-});
-document.addEventListener("pointerup", (event) => {
-  if (!wheelGesture || event.pointerId !== wheelGesture.pointerId) return;
-  const gesture = wheelGesture;
-  wheelGesture = null;
-  if (gesture.moved) wheelClickBlockedUntil = performance.now() + 350;
-  if (gesture.changed) save();
-});
-document.addEventListener("pointercancel", () => {
-  if (!wheelGesture) return;
-  const gesture = wheelGesture;
-  wheelGesture = null;
-  if (gesture.changed) save();
-});
-document.addEventListener("keydown", (event) => {
-  const wheel = event.target.closest("[data-wheel]");
-  if (!wheel) return;
-  const directions = { ArrowUp: 1, ArrowDown: -1, PageUp: 10, PageDown: -10, Home: "min", End: "max", Enter: 0, " ": 0 };
-  if (!(event.key in directions)) return;
-  event.preventDefault();
-  const direction = directions[event.key];
-  if (direction === "min" || direction === "max") {
-    const field = wheel.dataset.field, unit = wheel.dataset.unit;
-    const target = direction === "min"
-      ? field === "kg" ? 0 : field === "reps" ? 1 : 0
-      : field === "kg" ? unit === "lb" ? 2200 : 1000 : field === "reps" ? 200 : 10;
-    const set = wheelSet(wheel);
-    if (field === "kg") set.kg = unit === "lb" ? lbToKg(target) : target;
-    else set[field] = target;
-    if (field === "reps") set.done = true;
-    paintWheel(wheel);
-    save();
-    return;
-  }
-  if (!changeWheel(wheel, direction)) return;
-  save();
-});
-document.addEventListener("wheel", (event) => {
-  const wheel = event.target.closest("[data-wheel]");
-  if (!wheel || !event.deltaY) return;
-  event.preventDefault();
-  if (changeWheel(wheel, event.deltaY < 0 ? 1 : -1)) save();
-}, { passive: false });
 document.addEventListener("click", (event) => {
-  const unitButton = event.target.closest("[data-set-unit]");
-  if (unitButton) {
-    const set = state.sessions.find((session) => session.id === unitButton.dataset.session)
-      ?.exercises[+unitButton.dataset.ei]?.sets[+unitButton.dataset.si];
-    if (!set) return;
-    set.unit = unitButton.dataset.setUnit;
-    save();
+  const trigger = event.target.closest("[data-set-picker]");
+  if (trigger) {
+    openSetPicker(trigger.dataset.session, +trigger.dataset.ei, +trigger.dataset.si, trigger.dataset.setPicker);
     return;
   }
-  const wheelStep = event.target.closest("[data-wheel-step]");
-  if (wheelStep) {
-    if (performance.now() < wheelClickBlockedUntil) return;
-    const wheel = wheelStep.closest("[data-wheel]");
-    if (wheel && changeWheel(wheel, Number(wheelStep.dataset.wheelStep))) save();
+  const unitButton = event.target.closest("[data-picker-unit]");
+  if (unitButton && activeSetPicker) {
+    if (activeSetPicker.unit !== unitButton.dataset.pickerUnit) {
+      activeSetPicker.unit = unitButton.dataset.pickerUnit;
+      renderSetPickerWheel();
+    }
+    return;
+  }
+  if (event.target.closest("[data-set-picker-cancel]")) {
+    activeSetPicker = null;
+    closeModal();
+    return;
+  }
+  if (event.target.closest("[data-set-picker-save]")) {
+    commitSetPicker();
     return;
   }
 });
-
 document.addEventListener("click", (e) => {
   const period = e.target.closest("[data-training-window]");
   if (period) {
@@ -2039,6 +2033,8 @@ $("#modal").addEventListener("cancel", (e) => {
     return;
   }
   modalCleanup();
+  if (activeSetPicker?.settleTimer) clearTimeout(activeSetPicker.settleTimer);
+  activeSetPicker = null;
 });
 async function init() {
   try {
