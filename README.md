@@ -26,7 +26,7 @@ npm run check
 - Series directas e indirectas por músculo, con desglose de los ejercicios que contribuyen. Un mismo ejercicio puede tener varios músculos directos y secundarios, editables en cada sesión.
 - Ventanas de **últimos 7 días móviles** (fecha del diario y los 6 días anteriores) y **semana calendario** (lunes hasta la fecha del diario). No se incluyen registros posteriores a la fecha elegida.
 - Volumen con carga calculado como kg × repeticiones de las series completadas. Las series globales se cuentan una sola vez, aunque participen en varios músculos.
-- Objetivos de calorías, macros, mantenimiento estimado, peso y frecuencia de entrenamiento.
+- Configuración inicial con edad, estatura, peso, sexo para la ecuación, actividad diaria y objetivo; propone calorías y macros iniciales editables.
 - Registro diario de peso, media móvil de siete días, comparación entre semanas y gráficas.
 - Exportación e importación JSON con validación.
 
@@ -46,9 +46,11 @@ Los roles iniciales son una clasificación de registro editable, no una medició
 
 ## Datos y límites
 
-La primera visita muestra una demo claramente identificada. “Empezar mis registros” permite configurar objetivos y eliminar los datos de ejemplo. Las cifras iniciales de los objetivos son ejemplos editables.
+La aplicación inicia con los registros vacíos. La demo se puede cargar manualmente desde Mis objetivos. Si el navegador aún conserva la demo anterior, sus datos de ejemplo se eliminan y aparece la configuración inicial. Los registros propios de versiones anteriores se conservan mientras se completa esa configuración.
 
-Los registros personales se guardan en `localStorage` del navegador. Esta versión no incluye cuentas, sincronización entre dispositivos, base de marcas, escaneo de códigos de barras ni aplicación nativa. El JSON exportado permite mover los datos entre navegadores. Si se borran los datos del navegador, se necesita una copia para recuperarlos. Los archivos publicados no contienen registros personales.
+La primera visita solicita los datos necesarios para estimar objetivos. Los diarios de alimentos, entrenamientos y peso empiezan vacíos. Se usa Mifflin–St Jeor y un factor de actividad para proponer mantenimiento; perder o ganar peso ajusta esa referencia en 10%. Los macros se inicializan con una distribución editable de 25% proteínas, 45% carbohidratos y 30% grasas. Son puntos de partida, no una medición del gasto ni una recomendación clínica. La ecuación y el planificador de NIDDK están orientados a adultos; no uses esta estimación durante embarazo o lactancia. [Fuente de la ecuación](https://pubmed.ncbi.nlm.nih.gov/2305711/) · [NIDDK Body Weight Planner](https://www.niddk.nih.gov/bwp%20).
+
+Los registros personales y el perfil se guardan en `localStorage` del navegador. Esta versión no incluye cuentas, sincronización entre dispositivos, base de marcas, escaneo de códigos de barras ni aplicación nativa. El JSON exportado permite mover los datos entre navegadores. Si se borran los datos del navegador, se necesita una copia para recuperarlos. Los archivos publicados no contienen registros personales. Los perfiles y registros propios creados con versiones anteriores se conservan; se pide completar el nuevo perfil inicial una sola vez.
 
 Las medias nutricionales omiten días sin registros y pueden incluir días incompletos. Las series de ejercicios con peso corporal reflejan únicamente la carga añadida en el volumen. El déficit mostrado es el planificado a partir de las calorías y mantenimiento configurados; no es una medición del gasto energético.
 

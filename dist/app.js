@@ -123,19 +123,22 @@ let foodFilter = "Todos";
 let libraryQuery = "";
 let toastTimer;
 let modalCleanup = () => {};
+let onboardingActive = false;
 let storageFailed = false;
 const STORAGE = "pulso-fitness-v1";
 const defaults = () => ({
   version: 1,
   demo: false,
+  onboardingComplete: false,
+  profile: null,
   goals: {
     name: "",
-    kcal: 2200,
-    maintenance: 2500,
-    protein: 150,
-    carbs: 250,
-    fat: 65,
-    weight: 72,
+    kcal: 2000,
+    maintenance: 2000,
+    protein: 0,
+    carbs: 0,
+    fat: 0,
+    weight: 1,
     sessions: 4,
     mode: "lose",
   },
@@ -189,6 +192,7 @@ const pageNames = {
 function seedDemo() {
   const s = defaults();
   s.demo = true;
+  s.onboardingComplete = true;
   s.goals.name = "Alex";
   const add = (d, meal, id, grams) =>
     s.entries.push({
@@ -715,7 +719,8 @@ function foodTiles() {
 }
 function goalsForm(onboarding = false) {
   const g = state.goals;
-  return `<form id="goals-form" data-onboarding="${onboarding}"><div class="info-box">${onboarding ? "Empieza con tus propios registros. Al guardar, se borrarán únicamente los datos de ejemplo." : "Los objetivos son valores editables de tu plan personal."} Las cifras iniciales son ejemplos, no una recomendación personalizada.</div><div class="form-grid"><div class="field"><label for="goal-name">¿Cómo te llamas?</label><input id="goal-name" name="name" value="${esc(onboarding ? "" : g.name)}" placeholder="Tu nombre" maxlength="40"></div><div class="field"><label for="goal-mode">Mi objetivo es</label><select id="goal-mode" name="mode">${[
+  if (onboarding) return onboardingForm();
+  return `<form id="goals-form" data-onboarding="${onboarding}"><div class="info-box">Los objetivos son estimaciones editables de tu plan personal, no una recomendación clínica.</div><div class="form-grid"><div class="field"><label for="goal-name">¿Cómo te llamas?</label><input id="goal-name" name="name" value="${esc(onboarding ? "" : g.name)}" placeholder="Tu nombre" maxlength="40"></div><div class="field"><label for="goal-mode">Mi objetivo es</label><select id="goal-mode" name="mode">${[
     ["lose", "Perder peso"],
     ["maintain", "Mantener peso"],
     ["gain", "Ganar peso"],
@@ -727,6 +732,54 @@ function goalsForm(onboarding = false) {
     .join(
       "",
     )}</select></div><div class="field"><label for="goal-calories">Objetivo diario · kcal</label><input id="goal-calories" name="kcal" type="number" min="1" max="10000" step="1" required value="${g.kcal}"></div><div class="field"><label for="goal-maintenance">Mantenimiento estimado · kcal</label><input id="goal-maintenance" name="maintenance" type="number" min="1" max="10000" step="1" required value="${g.maintenance}"><small>Introduce el gasto diario estimado de tu plan.</small></div><div class="field"><label for="goal-protein">Proteínas · g al día</label><input id="goal-protein" name="protein" type="number" min="0" max="1000" step="1" required value="${g.protein}"></div><div class="field"><label for="goal-carbs">Carbohidratos · g al día</label><input id="goal-carbs" name="carbs" type="number" min="0" max="1000" step="1" required value="${g.carbs}"></div><div class="field"><label for="goal-fat">Grasas · g al día</label><input id="goal-fat" name="fat" type="number" min="0" max="1000" step="1" required value="${g.fat}"></div><div class="field"><label for="goal-weight">Peso objetivo · kg</label><input id="goal-weight" name="weight" type="number" min="1" max="500" step="0.1" required value="${g.weight}"></div><div class="field"><label for="goal-sessions">Entrenamientos por semana</label><input id="goal-sessions" name="sessions" type="number" min="1" max="14" step="1" required value="${g.sessions}"></div><div class="field"><label>Balance planificado</label><div id="goal-balance" class="info-box no-margin">${goalBalance(g)}</div></div><div class="field wide"><small>Las metas de macros equivalen aproximadamente a <span id="macro-kcal">${fmt(g.protein * 4 + g.carbs * 4 + g.fat * 9)}</span> kcal. Puedes ajustarlas de forma independiente al objetivo calórico.</small></div></div><div class="settings-actions"><button type="submit" class="btn primary">${icon("check")}${onboarding ? "Empezar mi diario" : "Guardar objetivos"}</button>${onboarding ? '<button type="button" class="btn" data-action="close">Seguir explorando</button>' : ""}</div><p class="help-text spacer-top">El balance planificado es la diferencia entre tu objetivo de calorías y el mantenimiento estimado que introduces. No se suman calorías del entrenamiento para evitar contarlas dos veces.</p></form>`;
+}
+function onboardingForm() {
+  return `<form id="onboarding-form">
+    <div class="info-box">Con estos datos calculamos una referencia inicial de mantenimiento y calorías diarias. Es una estimación editable, no sustituye una evaluación profesional.</div>
+    <div class="form-grid">
+      <div class="field"><label for="profile-age">Edad · años</label><input id="profile-age" name="age" type="number" inputmode="numeric" min="18" max="100" required placeholder="Ej. 28"></div>
+      <div class="field"><label for="profile-sex">Sexo usado por la fórmula</label><select id="profile-sex" name="sex" required><option value="" disabled selected>Seleccionar</option><option value="female">Mujer</option><option value="male">Hombre</option></select></div>
+      <div class="field"><label for="profile-height">Estatura · cm</label><input id="profile-height" name="height" type="number" inputmode="decimal" min="120" max="230" step="0.1" required placeholder="Ej. 170"></div>
+      <div class="field"><label for="profile-weight">Peso actual · kg</label><input id="profile-weight" name="weight" type="number" inputmode="decimal" min="30" max="300" step="0.1" required placeholder="Ej. 70"></div>
+      <div class="field wide"><label for="profile-activity">Actividad diaria habitual</label><select id="profile-activity" name="activity" required><option value="" disabled selected>Seleccionar</option><option value="sedentary">Principalmente sentado</option><option value="light">Ligera · camino parte del día</option><option value="moderate">Moderada · activo buena parte del día</option><option value="high">Alta · trabajo físico o mucha actividad</option></select><small>Considera tu día habitual, además de tus entrenamientos.</small></div>
+      <div class="field"><label for="profile-mode">Mi objetivo</label><select id="profile-mode" name="mode"><option value="lose">Perder peso</option><option value="maintain" selected>Mantener peso</option><option value="gain">Ganar peso</option></select></div>
+      <div class="field"><label for="profile-goal-weight">Peso objetivo · kg (opcional)</label><input id="profile-goal-weight" name="goalWeight" type="number" inputmode="decimal" min="1" max="500" step="0.1" placeholder="Por defecto, tu peso actual"></div>
+    </div>
+    <div class="settings-actions"><button type="submit" class="btn primary">${icon("check")}Crear mi diario</button></div>
+    <p class="help-text spacer-top">Solo para adultos (18+); no aplica durante embarazo o lactancia. Puedes ajustar calorías y macros después en Mis objetivos. Tus registros comienzan vacíos.</p>
+  </form>`;
+}
+const activityFactors = {
+  sedentary: 1.2,
+  light: 1.375,
+  moderate: 1.55,
+  high: 1.725,
+};
+function initialGoals(profile) {
+  const base =
+    10 * profile.weight +
+    6.25 * profile.height -
+    5 * profile.age +
+    (profile.sex === "male" ? 5 : -161);
+  const maintenance = Math.round(base * activityFactors[profile.activity]);
+  const mode = profile.mode;
+  const kcal = Math.max(
+    1000,
+    Math.round(
+      maintenance * (mode === "lose" ? 0.9 : mode === "gain" ? 1.1 : 1),
+    ),
+  );
+  return {
+    name: "",
+    kcal,
+    maintenance,
+    protein: Math.round((kcal * 0.25) / 4),
+    carbs: Math.round((kcal * 0.45) / 4),
+    fat: Math.round((kcal * 0.3) / 9),
+    weight: profile.goalWeight || profile.weight,
+    sessions: 4,
+    mode,
+  };
 }
 function goalBalance(g) {
   const delta = g.kcal - g.maintenance;
@@ -810,23 +863,48 @@ function bindGoals() {
       toast("Ajusta las calorías para que coincidan con el objetivo elegido.");
       return;
     }
-    if (form.dataset.onboarding === "true") {
-      state = defaults();
-      state.demo = false;
-      view = "home";
-      selectedDate = today();
-      currentSessionId = null;
-      closeModal();
-    }
     state.goals = g;
     save("Objetivos guardados. Tu siguiente paso empieza aquí.");
   });
 }
-function openModal(title, subtitle, body) {
+function bindOnboarding() {
+  const form = $("#onboarding-form");
+  if (!form) return;
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    if (!form.reportValidity()) return;
+    const data = Object.fromEntries(new FormData(form));
+    const profile = {
+      age: Number(data.age),
+      height: Number(data.height),
+      weight: Number(data.weight),
+      goalWeight: data.goalWeight
+        ? Number(data.goalWeight)
+        : Number(data.weight),
+      sex: data.sex,
+      activity: data.activity,
+      mode: data.mode,
+    };
+    if (state.demo) state = defaults();
+    state.demo = false;
+    state.profile = profile;
+    state.onboardingComplete = true;
+    const previousName = state.goals.name;
+    state.goals = initialGoals(profile);
+    state.goals.name = previousName;
+    view = "home";
+    selectedDate = today();
+    currentSessionId = null;
+    onboardingActive = false;
+    closeModal();
+    save("Tu diario está listo. Empieza con tu primer registro.");
+  });
+}
+function openModal(title, subtitle, body, { dismissible = true } = {}) {
   modalCleanup();
   modalCleanup = () => {};
   const modal = $("#modal");
-  modal.innerHTML = `<div class="modal-header"><div><h2 id="modal-title">${title}</h2>${subtitle ? `<p>${subtitle}</p>` : ""}</div>${iconButton("x", "close", "Cerrar ventana")}</div>${body}`;
+  modal.innerHTML = `<div class="modal-header"><div><h2 id="modal-title">${title}</h2>${subtitle ? `<p>${subtitle}</p>` : ""}</div>${dismissible ? iconButton("x", "close", "Cerrar ventana") : ""}</div>${body}`;
   if (!modal.open) modal.showModal();
   return modal;
 }
@@ -1268,12 +1346,14 @@ document.addEventListener("click", (e) => {
       render();
       break;
     case "start":
+      onboardingActive = true;
       openModal(
-        "Vamos a hacerlo tuyo.",
-        "Configura tus objetivos para empezar desde cero.",
+        "Tu diario empieza aquí",
+        "Completa lo básico para calcular una referencia inicial.",
         goalsForm(true),
+        { dismissible: false },
       );
-      bindGoals();
+      bindOnboarding();
       break;
     case "add-food":
       showFoodPicker(d.meal || "Desayuno");
@@ -1513,7 +1593,7 @@ document.addEventListener("click", (e) => {
   }
 });
 $("#modal").addEventListener("click", (e) => {
-  if (e.target === $("#modal")) {
+  if (!onboardingActive && e.target === $("#modal")) {
     const r = $("#modal").getBoundingClientRect();
     if (
       e.clientX < r.left ||
@@ -1524,7 +1604,11 @@ $("#modal").addEventListener("click", (e) => {
       closeModal();
   }
 });
-$("#modal").addEventListener("cancel", () => {
+$("#modal").addEventListener("cancel", (e) => {
+  if (onboardingActive) {
+    e.preventDefault();
+    return;
+  }
   modalCleanup();
 });
 async function init() {
@@ -1532,24 +1616,46 @@ async function init() {
     const response = await fetch("foods.json");
     if (!response.ok) throw Error();
     foods = await response.json();
+    let showOnboarding = false;
     try {
       const stored = localStorage.getItem(STORAGE);
       if (stored) {
         const parsed = JSON.parse(stored);
         if (!validState(parsed)) throw Error("invalid-state");
-        state = parsed;
+        if (parsed.demo) {
+          state = defaults();
+          persist();
+          showOnboarding = true;
+        } else {
+          state = parsed;
+          if (state.onboardingComplete === false) showOnboarding = true;
+          else if (state.onboardingComplete === undefined)
+            showOnboarding = true;
+        }
       } else {
-        state = seedDemo();
+        state = defaults();
         persist();
+        showOnboarding = true;
       }
     } catch {
       state = defaults();
       storageFailed = true;
+      showOnboarding = true;
       toast(
         "No se pudo leer el almacenamiento. Importa una copia o exporta antes de cerrar.",
       );
     }
     render();
+    if (showOnboarding) {
+      onboardingActive = true;
+      openModal(
+        "Tu diario empieza aquí",
+        "Completa lo básico para calcular una referencia inicial.",
+        onboardingForm(),
+        { dismissible: false },
+      );
+      bindOnboarding();
+    }
   } catch {
     $("#app").innerHTML =
       '<main style="max-width:500px;margin:15vh auto;padding:25px;font-family:sans-serif"><h1>No pudimos abrir la biblioteca.</h1><p style="margin-top:20px">Revisa tu conexión y vuelve a cargar la página.</p><button class="btn primary" onclick="location.reload()" style="margin-top:20px">Volver a intentar</button></main>';

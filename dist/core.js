@@ -144,6 +144,7 @@ export function validState(s) {
   const array = (a, check, max = 100000) =>
     Array.isArray(a) && a.length <= max && a.every(check);
   const goals = s?.goals;
+  const profile = s?.profile;
   const roles = (list, primary = false) =>
     list === undefined ||
     (array(
@@ -154,6 +155,22 @@ export function validState(s) {
       (!primary || list.length > 0));
   return Boolean(
     s?.version === 1 &&
+      (s.onboardingComplete === undefined ||
+        typeof s.onboardingComplete === "boolean") &&
+      (profile === undefined ||
+        profile === null ||
+        (profile &&
+          num(profile.age, 18, 100) &&
+          Number.isInteger(profile.age) &&
+          num(profile.height, 120, 230) &&
+          num(profile.weight, 30, 300) &&
+          (profile.goalWeight === undefined ||
+            num(profile.goalWeight, 1, 500)) &&
+          ["female", "male"].includes(profile.sex) &&
+          ["sedentary", "light", "moderate", "high"].includes(
+            profile.activity,
+          ) &&
+          ["lose", "maintain", "gain"].includes(profile.mode))) &&
       (s.trainingWindow === undefined ||
         ["rolling", "week"].includes(s.trainingWindow)) &&
       goals &&
