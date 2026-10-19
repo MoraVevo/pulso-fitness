@@ -75,6 +75,37 @@ function arrow(d, tip, angle = 0) {
     + path("M-4-3 0 3 4-3Z","#a76c44",`transform="translate(${tip[0]} ${tip[1]}) rotate(${angle})"`);
 }
 
+// Profile poses share one projection: the bar axis points into the page.
+// Shoulder/hip anchors also locate the neck and the contact with bench pads.
+function profileTorso(shoulder, hip) {
+  const dx = hip[0] - shoulder[0], dy = hip[1] - shoulder[1];
+  const angle = Math.atan2(dy, dx) * 180 / Math.PI - 90;
+  return `<g transform="translate(${shoulder.join(" ")}) rotate(${angle}) scale(1 ${Math.hypot(dx,dy)/43})">`
+    + path("M-5-3Q-11 0-10 11L-8 34-9 43H9L8 33Q13 21 11 9 11 1 5-2L3 5H-2Z",C.shirt)
+    + path("M-7 8Q-3 24-4 39L-9 43-8 30-10 11Z",C.seam)
+    + path("M-9 39Q0 42 9 39L11 50H-10Z",C.shorts)
+    + line("M6 17Q8 27 4 34","#8eb5b8",1.2) + "</g>";
+}
+function profileHead(shoulder, x, y) {
+  return segment(shoulder,[x-3,y+8],4,3,C.skin) + head(x,y);
+}
+function endOnWeight(x, y, small = false) {
+  const r = small ? 6 : 11;
+  return ellipse(x-6,y-4,r*.7,r,C.plate)
+    + line(`M${x-11} ${y-7}L${x+13} ${y+8}`,"#b5c3c8",3)
+    + ellipse(x+8,y+5,r*.78,r,C.shoe)
+    + ellipse(x+10,y+5,r*.65,r*.94,C.plate)
+    + ellipse(x+10,y+5,2,2,"#b7c9ce")
+    + line(`M${x+10} ${y+5}l5 3`,C.metal,2);
+}
+function cableHandle(x, y) {
+  return line(`M${x-8} ${y-5}L${x+8} ${y+5}`,C.dark,4)
+    + ellipse(x,y,3,3,C.metal);
+}
+function grip(x,y) {
+  return ellipse(x,y,3.3,3.8,C.skin) + line(`M${x-1} ${y-2}l3 1`,C.light,1.4);
+}
+
 function pulldown(neutral = false) {
   const hands = neutral ? [[96,65],[130,65]] : [[74,52],[150,52]];
   return tower(185) + line("M198 24H113V54",C.dark,2) + line("M185 20H113",C.metal,6)
@@ -94,15 +125,21 @@ function pullup(supine = false) {
     + arrow("M174 108V80",[174,79],180);
 }
 function bentRow(single = false) {
-  if (single) return seat(61,114,108) + line("M78 122L66 160M153 122L168 160",C.metal,4)
-    + leg([142,99],[152,130],[173,157],true) + leg([135,104],[108,111],[91,113])
-    + torso(101,88,-67) + head(87,80,-1)
-    + arm([103,91],[89,108],[74,111],true) + arm([110,91],[119,115],[103,125])
-    + dumbbell(103,128) + arrow("M77 147Q68 129 82 120",[83,120],-80);
-  return leg([134,108],[120,137],[127,158],true) + leg([143,110],[154,135],[163,158])
-    + torso(109,80,-54) + head(96,66,-1)
-    + arm([108,86],[101,111],[90,123],true) + arm([116,87],[134,108],[118,124])
-    + barbell(105,126) + arrow("M73 135L82 112",[82,111],200);
+  if (single) return seat(61,107,115)
+    + leg([100,85],[115,100],[79,100],true)
+    + arm([150,71],[157,88],[163,105],true)
+    + leg([97,86],[79,121],[68,158])
+    + profileTorso([148,68],[97,82]) + profileHead([148,68],163,54)
+    + arm([143,75],[112,81],[119,105])
+    + dumbbell(119,106) + grip(119,105) + grip(163,105)
+    + arrow("M99 137Q94 119 102 103",[103,102],-155);
+  return leg([94,108],[90,135],[75,158],true)
+    + arm([131,79],[102,89],[121,107],true)
+    + leg([100,110],[106,136],[94,158])
+    + profileTorso([135,75],[97,105]) + profileHead([135,75],149,61)
+    + arm([136,82],[106,89],[125,111])
+    + endOnWeight(125,111) + grip(125,111)
+    + arrow("M158 141Q155 123 145 111",[144,110],140);
 }
 function seatedRow(machine = false) {
   return (machine ? tower(190,73) + line("M158 57L178 62V105L149 112",C.metal,6)
@@ -115,69 +152,111 @@ function seatedRow(machine = false) {
     + line("M129 98L136 103L131 108",C.dark,3) + arrow("M157 113L137 109",[136,109],90);
 }
 function supportedRow() {
-  return line("M89 112L60 159M129 98L162 159M54 161H174",C.metal,5)
-    + path("M78 120L137 77Q142 73 146 79L151 86 87 132Z",C.pad)
-    + leg([140,110],[156,131],[165,158],true) + leg([132,115],[120,141],[112,158],false,-1)
-    + torso(113,84,-43) + head(97,67,-1)
-    + arm([105,91],[88,113],[91,128],true) + dumbbell(91,131)
-    + arm([122,90],[131,117],[118,132]) + dumbbell(118,135)
-    + arrow("M156 120L150 102",[149,101],160);
+  return line("M91 124L73 160M130 88L159 160M61 162H171",C.metal,5)
+    + path("M80 127L139 72Q143 69 147 74L150 79 89 136Z",C.pad)
+    + line("M88 126L143 76","#738f98",1.5)
+    + leg([84,120],[70,139],[64,158],true)
+    + arm([127,76],[102,95],[115,116],true) + dumbbell(115,116)
+    + leg([91,121],[86,141],[80,158])
+    + profileTorso([129,71],[86,116]) + profileHead([129,71],143,55)
+    + arm([133,80],[107,94],[121,117])
+    + dumbbell(121,118) + grip(121,117)
+    + arrow("M160 129Q157 109 146 100",[145,99],140);
 }
 function pullover() {
-  return tower(188,25) + line("M201 25L118 118",C.dark,1.5)
-    + leg([89,116],[79,139],[68,158],true,-1) + leg([97,117],[117,136],[129,158])
-    + torso(76,78,-29) + head(68,63)
-    + arm([66,88],[86,106],[113,119],true) + arm([87,84],[103,102],[121,116])
-    + line("M109 122L127 113",C.dark,4) + arrow("M148 68Q155 97 139 116",[139,117],25);
+  return tower(189,25) + line("M202 25L148 125",C.dark,1.5)
+    + leg([93,119],[88,139],[79,158],true)
+    + arm([111,79],[129,101],[145,123],true)
+    + leg([101,120],[111,140],[109,158])
+    + profileTorso([114,76],[97,115]) + profileHead([114,76],124,61)
+    + arm([117,81],[134,104],[151,127])
+    + cableHandle(148,125) + grip(145,123) + grip(151,127)
+    + arrow("M160 79Q173 98 163 117",[162,118],25);
 }
 function rearDelt(machine = false) {
-  return (machine ? line("M68 160V39H174V160M91 44L46 79M151 44L195 79",C.metal,5)
-      + seat(101,128,40) + rect(112,87,17,39,C.pad,5) : "")
-    + leg([111,124],[97,141],[91,159],true,-1) + leg([129,124],[143,140],[149,159])
-    + (machine ? torso(120,84,0,true) + head(120,69)
-      : path("M105 91Q120 85 135 91L139 102 130 125Q120 130 110 125L101 102Z",C.shirt)
-        + path("M107 101Q120 109 133 101L128 123H112Z",C.seam) + head(120,94))
+  if (machine) return reversePecDeck();
+  return leg([111,124],[97,141],[91,159],true,-1) + leg([129,124],[143,140],[149,159])
+    + path("M105 91Q120 85 135 91L139 102 130 125Q120 130 110 125L101 102Z",C.shirt)
+    + path("M107 101Q120 109 133 101L128 123H112Z",C.seam) + head(120,94)
     + arm([105,94],[76,98],[48,83],true) + arm([135,94],[164,98],[192,83])
-    + (machine ? line("M47 77V87M193 77V87",C.dark,5) : dumbbell(47,81,65)+dumbbell(193,81,-65))
+    + dumbbell(47,81,65)+dumbbell(193,81,-65)
     + arrow("M161 64Q177 62 185 71",[186,72],-40)
     + arrow("M79 64Q63 62 55 71",[54,72],40);
 }
+function reversePecDeck() {
+  return tower(183,42) + line("M196 42H140V36M140 36L72 79M140 36L88 77",C.metal,5)
+    + ellipse(140,36,7,7,C.dark) + ellipse(140,36,3,3,C.metal)
+    + line("M134 116V160M105 161H156",C.metal,5) + seat(96,126,43)
+    + leg([113,125],[145,131],[144,158],true)
+    + arm([116,82],[102,91],[88,86],true)
+    + leg([109,127],[137,135],[135,158])
+    + profileTorso([119,79],[109,121]) + profileHead([119,79],121,63)
+    + rect(130,80,9,35,C.pad,4)
+    + line("M72 79V94M88 77V91",C.dark,4)
+    + arm([118,85],[94,94],[72,88]) + grip(72,88)
+    + arrow("M104 60Q82 56 67 68",[66,69],45);
+}
 function facepull() {
-  return tower(186,62) + line("M199 62L127 66",C.dark,1.5)
-    + leg([91,119],[79,140],[68,159],true,-1) + leg([99,120],[115,139],[125,159])
-    + torso(89,77,-8) + head(83,61)
-    + line("M128 66L109 58M128 66L111 78",C.dark,3)
-    + arm([79,84],[113,95],[108,60],true) + arm([103,82],[130,86],[111,77])
-    + ellipse(108,59,4,4,C.dark) + ellipse(110,77,4,4,C.dark)
-    + arrow("M163 49H136",[135,49],90);
+  const farHand = [114,58], nearHand = [119,68], junction = [147,63];
+  return tower(186,63) + line(`M199 63L${junction.join(" ")}`,C.dark,1.5)
+    + line(`M${farHand.join(" ")}L${junction.join(" ")}L${nearHand.join(" ")}`,C.dark,3)
+    + leg([91,121],[83,140],[72,158],true)
+    + arm([99,81],[76,64],farHand,true)
+    + leg([98,122],[110,141],[119,158])
+    + profileTorso([100,79],[94,117]) + profileHead([100,79],105,62)
+    + arm([102,84],[81,71],nearHand)
+    + ellipse(...farHand,4.5,4.5,C.dark) + grip(...farHand)
+    + ellipse(...nearHand,4.5,4.5,C.dark) + grip(...nearHand)
+    + arrow("M171 49H143",[142,49],90);
 }
 function standingCurl(kind = "dumbbell") {
-  const cable = kind === "cable", bar = kind === "barbell", hammer = kind === "hammer", shrug = kind === "shrug";
-  const x = cable ? 88 : 120;
+  const bar = kind === "barbell", hammer = kind === "hammer", shrug = kind === "shrug";
+  const x = 120;
   const hands = shrug ? [[x-26,116],[x+26,116]] : [[x-29,91],[x+29,91]];
-  return (cable ? tower(185,146) + line(`M198 146L${x+29} 91`,C.dark,1.5) : "")
-    + leg([x-8,119],[x-16,139],[x-19,159],true,-1) + leg([x+8,119],[x+16,139],[x+19,159])
+  return leg([x-8,119],[x-16,139],[x-19,159],true,-1) + leg([x+8,119],[x+16,139],[x+19,159])
     + torso(x,76) + head(x,60)
     + arm([x-15,84],[x-25,108],hands[0],true) + arm([x+15,84],[x+25,108],hands[1])
-    + (bar ? barbell(x,91) : cable ? line(`M${x-32} 91h64`,C.dark,4)
-      : dumbbell(...hands[0],hammer ? 90 : 0) + dumbbell(...hands[1],hammer ? 90 : 0))
+    + (bar ? barbell(x,91) : dumbbell(...hands[0],hammer ? 90 : 0) + dumbbell(...hands[1],hammer ? 90 : 0))
     + (shrug ? arrow(`M${x+40} 82V65`,[x+40,64],180)+arrow(`M${x-40} 82V65`,[x-40,64],180)
       : arrow(`M${x+48} 122Q${x+64} 104 ${x+46} 87`,[x+45,86],140));
 }
 function preacher() {
-  return seat(57,124,45) + line("M132 105V160M109 160H154",C.metal,5)
-    + leg([87,122],[113,136],[119,159],true) + leg([78,123],[74,140],[68,159],false,-1)
-    + torso(80,78,-13) + head(73,63)
-    + path("M100 91L153 111Q157 113 154 119L151 124 96 103Z",C.pad)
-    + arm([72,87],[106,105],[130,92],true) + arm([96,85],[121,111],[141,95])
-    + barbell(136,93,true) + arrow("M173 130Q184 113 168 99",[167,98],140);
+  return seat(65,126,43) + line("M130 112V160M113 161H158",C.metal,5)
+    + path("M104 91L145 116Q148 118 145 123L142 126 98 100Z",C.pad)
+    + line("M105 95L143 119","#738f98",1.5)
+    + leg([84,125],[119,135],[126,158],true)
+    + arm([98,86],[131,109],[151,85],true)
+    + leg([81,126],[108,139],[111,158])
+    + profileTorso([99,80],[83,120]) + profileHead([99,80],108,65)
+    + arm([104,87],[134,113],[156,89])
+    + endOnWeight(156,89) + grip(156,89)
+    + arrow("M184 126Q193 103 180 89",[179,88],140);
 }
 function wrist() {
-  return seat(60,123,62) + line("M125 139H167M135 140V161M158 140V161",C.metal,4)
-    + rect(121,133,49,7,C.pad,3) + leg([97,123],[124,137],[130,159],true)
-    + leg([89,124],[102,140],[99,159]) + torso(83,82,-23) + head(75,67)
-    + arm([77,93],[115,127],[157,130],true) + arm([96,90],[128,131],[169,126])
-    + dumbbell(173,123,10) + arrow("M188 142Q201 132 190 117",[189,116],140);
+  return seat(64,128,53)
+    + leg([86,124],[128,129],[132,158],true)
+    + segment([101,84],[112,118],6,4,C.shade)
+    + segment([112,118],[140,122],4.5,2.8,C.shade)
+    + segment([140,122],[146,113],2.8,2.8,C.shade)
+    + endOnWeight(146,113,true) + grip(146,113)
+    + leg([86,126],[133,132],[136,158])
+    + profileTorso([102,80],[84,121]) + profileHead([102,80],115,65)
+    + segment([105,87],[116,121],6,4,C.skin)
+    + segment([116,121],[144,126],4.5,2.8,C.skin)
+    + segment([144,126],[150,117],2.8,2.8,C.skin)
+    + endOnWeight(150,117,true) + grip(150,117)
+    + arrow("M177 131Q187 116 175 105",[174,104],140);
+}
+function cableCurl() {
+  const handle = [138,89];
+  return tower(185,146) + line(`M198 146L${handle.join(" ")}`,C.dark,1.5)
+    + leg([96,121],[91,140],[86,158],true)
+    + arm([99,84],[101,108],[135,87],true)
+    + leg([103,122],[108,141],[113,158])
+    + profileTorso([101,79],[99,117]) + profileHead([101,79],104,63)
+    + arm([104,85],[107,111],[141,91])
+    + cableHandle(...handle) + grip(135,87) + grip(141,91)
+    + arrow("M156 119Q167 104 156 88",[155,87],140);
 }
 
 const illustrations = {
@@ -189,7 +268,7 @@ const illustrations = {
   "rear-delt": () => rearDelt(), "reverse-pec-deck": () => rearDelt(true),
   facepull, shrug: () => standingCurl("shrug"), curl: () => standingCurl(),
   "barbell-curl": () => standingCurl("barbell"), hammer: () => standingCurl("hammer"),
-  "cable-curl": () => standingCurl("cable"), "preacher-curl": preacher, "wrist-curl": wrist,
+  "cable-curl": cableCurl, "preacher-curl": preacher, "wrist-curl": wrist,
 };
 const fallback = {
   pulldown: "pulldown", pullup: "pullup", row: "row", "seated-row": "cable-row",
