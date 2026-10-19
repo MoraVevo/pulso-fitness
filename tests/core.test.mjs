@@ -7,6 +7,9 @@ import {
   weekDays,
   mealTotals,
   sessionVolume,
+  kgToLb,
+  lbToKg,
+  exerciseLoadSuggestion,
   weeklyStats,
   trainingStats,
   trainingDays,
@@ -195,7 +198,7 @@ test("semana de lunes a domingo atraviesa año y mes", () => {
   ]);
   assert.equal(shiftDate("2024-03-01", -1), "2024-02-29");
 });
-test("volumen, RIR y músculos solo cuentan series completadas", () => {
+test("volumen y músculos cuentan series completadas y RIR vacío equivale a 0", () => {
   const s = {
     date: "2026-10-18",
     finished: true,
@@ -217,8 +220,40 @@ test("volumen, RIR y músculos solo cuentan series completadas", () => {
   assert.equal(stats.volume, 1080);
   assert.equal(stats.sets, 3);
   assert.equal(stats.sessions, 1);
-  assert.equal(stats.rir, 1);
+  assert.equal(stats.rir, 2 / 3);
   assert.equal(stats.muscles.Pecho, 3);
+});
+test("sugiere la media de carga de los últimos 14 días y excluye otros registros", () => {
+  const sessions = [
+    {
+      date: "2026-10-04",
+      exercises: [{ exerciseId: "bench", sets: [{ kg: 100, done: true }] }],
+    },
+    {
+      date: "2026-10-05",
+      exercises: [{ exerciseId: "bench", sets: [{ kg: 20, done: true }, { kg: 80, done: false }] }],
+    },
+    {
+      date: "2026-10-18",
+      exercises: [{ exerciseId: "bench", sets: [{ kg: 40, done: true }] }],
+    },
+    {
+      date: "2026-10-19",
+      exercises: [{ exerciseId: "bench", sets: [{ kg: 200, done: true }] }],
+    },
+  ];
+  assert.deepEqual(
+    exerciseLoadSuggestion(sessions, "bench", "2026-10-18"),
+    { kg: 30, source: "history" },
+  );
+  assert.deepEqual(exerciseLoadSuggestion([], "fly", "2026-10-18"), {
+    kg: 5,
+    source: "starter",
+  });
+});
+test("las cargas se convierten entre kg y lb", () => {
+  assert.equal(kgToLb(1), 2.2046226218487757);
+  assert.equal(lbToKg(kgToLb(42.5)), 42.5);
 });
 test("media de peso compara dos ventanas y no usa datos futuros", () => {
   const result = weightStats(
@@ -334,6 +369,13 @@ test("importación rechaza valores imposibles, datos incompletos y fechas invál
     validState({ ...state, sessions: [modern], trainingWindow: "rolling" }),
     true,
   );
+  const blankSet = structuredClone(modern);
+  blankSet.exercises[0].sets = [
+    { kg: 5, unit: "lb", reps: "", rir: "", done: false },
+  ];
+  assert.equal(validState({ ...state, sessions: [blankSet] }), true);
+  blankSet.exercises[0].sets[0].unit = "oz";
+  assert.equal(validState({ ...state, sessions: [blankSet] }), false);
   assert.equal(
     validState({
       ...state,
