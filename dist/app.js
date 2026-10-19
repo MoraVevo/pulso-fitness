@@ -6,10 +6,17 @@ import {
   mealTotals,
   completedSets,
   sessionVolume,
-  weeklyStats,
+  trainingStats,
+  trainingDays,
   weightStats,
   validState,
 } from "./core.js";
+import {
+  exercises,
+  muscleNames,
+  exerciseMuscles,
+  canonicalMuscle,
+} from "./exercises.js";
 
 const $ = (s) => document.querySelector(s);
 const fmt = (n, decimals = 0) =>
@@ -40,47 +47,6 @@ const mealTime = {
   Cena: "Cierra tu día a tu manera",
   Snacks: "Pequeños momentos, también cuentan",
 };
-const muscleNames = [
-  "Pecho",
-  "Espalda",
-  "Cuádriceps",
-  "Isquiotibiales",
-  "Glúteos",
-  "Hombros",
-  "Bíceps",
-  "Tríceps",
-  "Core",
-  "Pantorrillas",
-];
-const exercises = [
-  ["bench", "Press de banca", "Pecho", "Barra"],
-  ["incline", "Press inclinado", "Pecho", "Mancuernas"],
-  ["fly", "Aperturas", "Pecho", "Mancuernas"],
-  ["pushup", "Flexiones", "Pecho", "Peso corporal"],
-  ["pulldown", "Jalón al pecho", "Espalda", "Polea"],
-  ["row", "Remo con barra", "Espalda", "Barra"],
-  ["cable-row", "Remo sentado", "Espalda", "Polea"],
-  ["pullup", "Dominadas", "Espalda", "Peso corporal"],
-  ["squat", "Sentadilla", "Cuádriceps", "Barra"],
-  ["legpress", "Prensa de piernas", "Cuádriceps", "Máquina"],
-  ["extension", "Extensión de cuádriceps", "Cuádriceps", "Máquina"],
-  ["lunge", "Zancadas", "Cuádriceps", "Mancuernas"],
-  ["rdl", "Peso muerto rumano", "Isquiotibiales", "Barra"],
-  ["legcurl", "Curl femoral", "Isquiotibiales", "Máquina"],
-  ["deadlift", "Peso muerto", "Espalda", "Barra"],
-  ["hipthrust", "Hip thrust", "Glúteos", "Barra"],
-  ["kickback", "Patada de glúteo", "Glúteos", "Polea"],
-  ["ohp", "Press militar", "Hombros", "Barra"],
-  ["lateral", "Elevaciones laterales", "Hombros", "Mancuernas"],
-  ["facepull", "Face pull", "Hombros", "Polea"],
-  ["curl", "Curl de bíceps", "Bíceps", "Mancuernas"],
-  ["hammer", "Curl martillo", "Bíceps", "Mancuernas"],
-  ["triceps", "Extensión de tríceps", "Tríceps", "Polea"],
-  ["overhead", "Extensión sobre la cabeza", "Tríceps", "Mancuerna"],
-  ["crunch", "Crunch abdominal", "Core", "Peso corporal"],
-  ["cablecrunch", "Crunch en polea", "Core", "Polea"],
-  ["calf", "Elevación de talones", "Pantorrillas", "Máquina"],
-].map(([id, name, muscle, equipment]) => ({ id, name, muscle, equipment }));
 const routines = [
   {
     name: "Torso · Empuje",
@@ -150,7 +116,7 @@ let foods = [];
 let state;
 let view = "home";
 let selectedDate = today();
-let tab = "session";
+let tab = "volume";
 let progressTab = "weight";
 let currentSessionId = null;
 let foodFilter = "Todos";
@@ -180,6 +146,12 @@ const defaults = () => ({
   customFoods: [],
 });
 const allFoods = () => [...state.customFoods, ...foods];
+const trainingMode = () =>
+  state.trainingWindow === "week" ? "week" : "rolling";
+const periodLabel = () =>
+  trainingMode() === "week" ? "Semana calendario" : "Últimos 7 días";
+const currentTrainingStats = () =>
+  trainingStats(state.sessions, selectedDate, trainingMode());
 const exerciseCatalog = () => [
   ...exercises,
   ...[
@@ -193,6 +165,8 @@ const exerciseCatalog = () => [
             id: e.exerciseId,
             name: e.name,
             muscle: e.muscle,
+            primaryMuscles: exerciseMuscles(e).primary,
+            secondaryMuscles: exerciseMuscles(e).secondary,
             equipment: "Personalizado",
           },
         ]),
@@ -377,13 +351,14 @@ function macrosCard() {
     .join("")}</div></article>`;
 }
 function trainingCard() {
-  const stats = weeklyStats(state.sessions, selectedDate);
-  return `<article class="card"><div class="card-title"><h2 class="label-icon">${icon("dumbbell")} Entrenamiento</h2><span class="tag green">Esta semana</span></div><div class="training-number"><strong class="big-number">${stats.sessions}<span class="muted" style="font-size:19px;font-weight:400"> / ${state.goals.sessions}</span></strong><small>sesiones</small></div><div class="week-dots">${weekDays(
+  const stats = currentTrainingStats();
+  return `<article class="card"><div class="card-title"><h2 class="label-icon">${icon("dumbbell")} Entrenamiento</h2><span class="tag green">${periodLabel()}</span></div><div class="training-number"><strong class="big-number">${stats.sessions}<span class="muted" style="font-size:19px;font-weight:400"> / ${state.goals.sessions}</span></strong><small>sesiones</small></div><div class="week-dots">${trainingDays(
     selectedDate,
+    trainingMode(),
   )
     .map((d, i) => {
       const done = state.sessions.some((s) => s.date === d && s.finished);
-      return `<div class="week-day"><span>${["L", "M", "M", "J", "V", "S", "D"][i]}</span><div class="day-dot ${done ? "done" : ""} ${d === selectedDate ? "today" : ""}" title="${dateLabel(d)}${done ? " · Entrenamiento completado" : ""}">${done ? icon("check") : d.slice(-2).replace(/^0/, "")}</div></div>`;
+      return `<div class="week-day"><span>${dateLabel(d, { weekday: "narrow" })}</span><div class="day-dot ${done ? "done" : ""} ${d === selectedDate ? "today" : ""}" title="${dateLabel(d)}${done ? " · Entrenamiento completado" : ""}">${done ? icon("check") : d.slice(-2).replace(/^0/, "")}</div></div>`;
     })
     .join(
       "",
@@ -398,7 +373,7 @@ function weekChart() {
 }
 function homePage() {
   const w = weightStats(state.weights, selectedDate),
-    stats = weeklyStats(state.sessions, selectedDate);
+    stats = currentTrainingStats();
   const sessionDays = new Set(
     state.sessions
       .filter((s) => s.finished && s.date <= selectedDate)
@@ -446,9 +421,9 @@ function nutritionPage() {
     )}<p class="source-note">Los valores de la biblioteca provienen de USDA SR28. Las porciones domésticas son orientativas; usa gramos para mayor precisión. Revisa si el alimento está crudo o cocido. <a href="https://www.ars.usda.gov/ARSUserFiles/80400525/Data/SR/SR28/dnload/sr28abbr.zip" target="_blank" rel="noopener">Consultar base de origen</a>.</p>`;
 }
 function metrics() {
-  const s = weeklyStats(state.sessions, selectedDate);
+  const s = currentTrainingStats();
   return `<div class="metrics-4">${[
-    [s.sessions, "Sesiones esta semana", "sesiones"],
+    [s.sessions, "Sesiones del periodo", "sesiones completadas"],
     [s.sets, "Series realizadas", "series"],
     [fmt(s.volume), "Volumen con carga", "kg × reps"],
     [s.rir === null ? "—" : fmt(s.rir, 1), "RIR medio", "reps en reserva"],
@@ -459,9 +434,17 @@ function metrics() {
     )
     .join("")}</div>`;
 }
+function periodControl() {
+  const stats = currentTrainingStats();
+  return `<section class="period-control" aria-label="Periodo de entrenamiento"><div><strong>Tu volumen, con perspectiva</strong><p>${dateLabel(stats.start, { day: "numeric", month: "short", year: "numeric" })} — ${dateLabel(stats.end, { day: "numeric", month: "short", year: "numeric" })} · hasta la fecha del diario</p></div><div class="tabs no-margin" role="group" aria-label="Elegir periodo"><button class="tab ${trainingMode() === "rolling" ? "active" : ""}" data-training-window="rolling" aria-pressed="${trainingMode() === "rolling"}">Últimos 7 días</button><button class="tab ${trainingMode() === "week" ? "active" : ""}" data-training-window="week" aria-pressed="${trainingMode() === "week"}">Semana calendario</button></div></section>`;
+}
+function muscleOverview() {
+  return `<div class="grid-2 muscle-overview">${muscleVolumeCard()}<div><article class="card"><div class="section-heading"><div><h2>Distintos ejercicios. El mismo músculo.</h2><p>Un registro que conecta toda tu semana.</p></div>${icon("target")}</div><div class="example-timeline"><div><span>LUN</span><strong>Press de banca</strong><small>3 series de ejemplo</small></div><div><span>MIÉ</span><strong>Press de pecho en máquina</strong><small>3 series de ejemplo</small></div><div><span>DOM</span><strong>Flexiones (push ups)</strong><small>3 series de ejemplo</small></div></div><div class="info-box no-margin">En este ejemplo: <strong>pecho, 9 directas</strong>; <strong>deltoides y tríceps, 9 indirectas cada uno</strong>. El conteo se actualiza al completar tus series.</div><p class="help-text spacer-top">Los últimos 7 días incluyen la fecha elegida y los 6 días anteriores. Al avanzar la fecha, las series más antiguas salen automáticamente del periodo.</p></article><article class="card spacer-top"><h3>${exercises.length} ejercicios, muchas formas de entrenar</h3><p class="help-text spacer-top">Barra, mancuernas, poleas, máquinas y peso corporal. Los ejercicios personalizados también participan en el conteo.</p><p class="help-text spacer-top">Las series directas e indirectas se registran por separado. El total de participación cuenta una serie por cada músculo asignado; no expresa una equivalencia de estímulo entre ejercicios.</p><p class="source-note">Puedes adaptar los músculos de cada ejercicio a su variante con el botón ${icon("target").replace('class="icon', 'style="display:inline;width:12px;height:12px" class="icon')} de la sesión. <a href="https://www.acefitness.org/resources/everyone/exercise-library/" target="_blank" rel="noopener">Biblioteca de referencia de movimientos: ACE</a>.</p>${button("Crear sesión", "new-session", "plus", "full spacer-top")}</article></div></div>`;
+}
 function trainingPage() {
   const session = getSession();
-  return `${heading("Haz que cada serie cuente.", "Tu esfuerzo de hoy, tu progreso de mañana.", button("Nueva sesión", "new-session", "plus"), "ENTRENAMIENTO")}${metrics()}<div class="tabs" role="tablist" aria-label="Entrenamiento">${[
+  return `${heading("Haz que cada serie cuente.", "Tu esfuerzo de hoy, tu progreso de mañana.", button("Nueva sesión", "new-session", "plus"), "ENTRENAMIENTO")}${periodControl()}${metrics()}<div class="tabs" role="tablist" aria-label="Entrenamiento">${[
+    ["volume", "Volumen por músculo"],
     ["session", "Mi sesión"],
     ["routines", "Rutinas"],
     ["history", "Historial"],
@@ -471,30 +454,32 @@ function trainingPage() {
         `<button class="tab ${tab === id ? "active" : ""}" data-training-tab="${id}" role="tab" aria-selected="${tab === id}">${label}</button>`,
     )
     .join("")}</div>${
-    tab === "session"
-      ? `<div class="grid-2 workout-grid" style="grid-template-columns:minmax(0,1.65fr) minmax(0,1fr)"><article class="card">${session ? sessionEditor(session) : empty("Tu próxima sesión empieza aquí.", "Elige una rutina o crea una sesión con tus ejercicios.", "new-session", "Crear sesión", "dumbbell")}</article><div>${muscleVolumeCard()}<article class="card spacer-top"><h3>Entrena con contexto</h3><p class="help-text" style="margin-top:13px">El RIR registra cuántas repeticiones crees que podrías haber hecho al terminar una serie. 0 = ninguna más.</p><p class="help-text" style="margin-top:10px">Marca ${icon("check").replace('class="icon', 'style="display:inline;width:12px;height:12px" class="icon')} cada serie al completarla. El volumen suma peso × repeticiones de las series realizadas. En ejercicios con peso corporal registra solo la carga añadida.</p><p class="help-text" style="margin-top:10px">Las series se atribuyen al grupo muscular principal del ejercicio.</p></article></div></div>`
-      : tab === "routines"
-        ? `<div class="grid-2">${routines
-            .map(
-              (r, i) =>
-                `<article class="card"><div class="card-title"><h2>${r.name}</h2><span class="tag">${r.ids.length} ejercicios</span></div><p class="help-text">${r.note}</p><div class="spacer-top">${r.ids
-                  .map((id) => {
-                    const ex = exercises.find((e) => e.id === id);
-                    return `<div class="history-row"><div class="small-symbol">${icon("dumbbell")}</div><div><h4>${ex.name}</h4><p>${ex.muscle} · ${ex.equipment}</p></div></div>`;
-                  })
-                  .join(
-                    "",
-                  )}</div>${button("Usar rutina", "use-routine", "plus", "full spacer-top", `data-index="${i}"`)}<p class="source-note">Plantilla editable. Ajusta series, cargas y repeticiones a tu plan.</p></article>`,
-            )
-            .join("")}</div>`
-        : historyPage()
+    tab === "volume"
+      ? muscleOverview()
+      : tab === "session"
+        ? `<div class="grid-2 workout-grid"><article class="card">${session ? sessionEditor(session) : empty("Tu próxima sesión empieza aquí.", "Elige una rutina o crea una sesión con tus ejercicios.", "new-session", "Crear sesión", "dumbbell")}</article><div>${muscleVolumeCard()}<article class="card spacer-top"><h3>Entrena con contexto</h3><p class="help-text" style="margin-top:13px">El RIR registra cuántas repeticiones crees que podrías haber hecho al terminar una serie. 0 = ninguna más.</p><p class="help-text" style="margin-top:10px">Marca ${icon("check").replace('class="icon', 'style="display:inline;width:12px;height:12px" class="icon')} cada serie al completarla. El volumen suma peso × repeticiones de las series realizadas. En ejercicios con peso corporal registra solo la carga añadida.</p><p class="help-text" style="margin-top:10px">Cada ejercicio puede sumar series directas e indirectas a distintos músculos. Puedes editar esa distribución con el botón de músculos de cada ejercicio.</p></article></div></div>`
+        : tab === "routines"
+          ? `<div class="grid-2">${routines
+              .map(
+                (r, i) =>
+                  `<article class="card"><div class="card-title"><h2>${r.name}</h2><span class="tag">${r.ids.length} ejercicios</span></div><p class="help-text">${r.note}</p><div class="spacer-top">${r.ids
+                    .map((id) => {
+                      const ex = exercises.find((e) => e.id === id);
+                      return `<div class="history-row"><div class="small-symbol">${icon("dumbbell")}</div><div><h4>${ex.name}</h4><p>${ex.muscle} · ${ex.equipment}</p></div></div>`;
+                    })
+                    .join(
+                      "",
+                    )}</div>${button("Usar rutina", "use-routine", "plus", "full spacer-top", `data-index="${i}"`)}<p class="source-note">Plantilla editable. Ajusta series, cargas y repeticiones a tu plan.</p></article>`,
+              )
+              .join("")}</div>`
+          : historyPage()
   }`;
 }
 function sessionEditor(s) {
   return `<div class="workout-header"><div><h2>${esc(s.name)}</h2><p class="subtitle" style="font-size:10px;margin-top:5px">${dateLabel(s.date, { weekday: "long", day: "numeric", month: "long" })} · ${s.finished ? "Sesión completada" : "En curso"} · ${fmt(sessionVolume(s))} kg de volumen</p></div><div>${iconButton("edit", "rename-session", "Cambiar nombre de sesión", `data-id="${s.id}"`)}${iconButton("trash", "delete-session", "Eliminar sesión", `data-id="${s.id}"`)}</div></div>${s.exercises
     .map(
       (ex, ei) =>
-        `<div class="exercise-card"><div class="exercise-top"><div class="small-symbol">${icon("dumbbell")}</div><div><h3>${esc(ex.name)}</h3><p>${esc(ex.muscle)} · ${lastPerformance(ex.exerciseId, s)}</p></div>${iconButton("x", "remove-exercise", "Quitar ejercicio", `data-session="${s.id}" data-ei="${ei}"`)}</div><table class="set-table"><thead><tr><th>Serie</th><th>Peso kg</th><th>Reps</th><th>RIR</th><th>Hecha</th><th></th></tr></thead><tbody>${ex.sets
+        `<div class="exercise-card"><div class="exercise-top"><div class="small-symbol">${icon("dumbbell")}</div><div><h3>${esc(ex.name)}</h3><p>${esc(exerciseMuscles(ex).primary.join(" + "))} · ${lastPerformance(ex.exerciseId, s)}</p></div>${iconButton("target", "edit-exercise-muscles", "Editar músculos de " + ex.name, `data-session="${s.id}" data-ei="${ei}"`)}${iconButton("x", "remove-exercise", "Quitar ejercicio", `data-session="${s.id}" data-ei="${ei}"`)}</div><table class="set-table"><thead><tr><th>Serie</th><th>Peso kg</th><th>Reps</th><th>RIR</th><th>Hecha</th><th></th></tr></thead><tbody>${ex.sets
           .map(
             (set, si) =>
               `<tr class="${set.done ? "completed" : ""}"><td>${si + 1}</td>${[
@@ -535,22 +520,28 @@ function lastPerformance(id, current) {
     : "Sin sesión anterior";
 }
 function muscleVolumeCard() {
-  const stats = weeklyStats(state.sessions, selectedDate);
-  const max = Math.max(1, ...Object.values(stats.muscles));
-  return `<article class="card"><div class="section-heading"><div><h2>Volumen semanal</h2><p>Series realizadas por grupo muscular principal</p></div>${icon("chart")}</div>${
-    stats.sets
-      ? muscleNames
-          .filter((m) => stats.muscles[m])
-          .map(
-            (m) =>
-              `<div class="volume-row"><div><span>${m}</span><strong>${stats.muscles[m]} <small class="muted">series</small></strong></div><div class="track"><i style="width:${(stats.muscles[m] / max) * 100}%"></i></div></div>`,
-          )
-          .join("")
-      : empty(
-          "Aquí verás tu esfuerzo.",
-          "Completa tus primeras series para ver la distribución.",
-        )
-  }</article>`;
+  const stats = currentTrainingStats();
+  const max = Math.max(
+    1,
+    ...Object.values(stats.muscleBreakdown).map((m) => m.total),
+  );
+  const names = [
+    ...new Set([...muscleNames, ...Object.keys(stats.muscleBreakdown)]),
+  ];
+  return `<article class="card muscle-volume"><div class="section-heading"><div><h2>Series por músculo</h2><p>${periodLabel()} · ${dateLabel(stats.start)} — ${dateLabel(stats.end)}</p></div>${icon("chart")}</div><div class="chart-legend"><span><i class="bullet"></i> Directas</span><span><i class="bullet" style="background:#bdd19f"></i> Indirectas</span></div><table class="muscle-table"><caption class="sr-only">Series completadas por músculo en ${periodLabel().toLowerCase()}</caption><thead><tr><th>Músculo</th><th>Directas</th><th>Indirectas</th><th>Total</th></tr></thead><tbody>${names
+    .map((m) => {
+      const row = stats.muscleBreakdown[m] || {
+        direct: 0,
+        indirect: 0,
+        total: 0,
+        exercises: [],
+      };
+      const label = `${esc(m)}<div class="muscle-track" aria-hidden="true"><i style="width:${(row.direct / max) * 100}%"></i><i class="secondary" style="width:${(row.indirect / max) * 100}%"></i></div>`;
+      return `<tr class="${row.total ? "has-volume" : ""}" data-muscle="${esc(m)}"><td>${row.total ? `<details><summary>${label}</summary><div class="muscle-contributions">${row.exercises.map((ex) => `<div><strong>${esc(ex.name)}</strong><span>${ex.direct ? `${ex.direct} directas` : ""}${ex.direct && ex.indirect ? " · " : ""}${ex.indirect ? `${ex.indirect} indirectas` : ""}</span></div>`).join("")}</div></details>` : label}</td><td data-count="direct">${row.direct}</td><td data-count="indirect">${row.indirect}</td><td data-count="total"><strong>${row.total}</strong></td></tr>`;
+    })
+    .join(
+      "",
+    )}</tbody></table><p class="source-note">${stats.sets} series realizadas. Una misma serie puede participar en varios músculos, pero se cuenta una sola vez en el total de series de la sesión. Toca un músculo para ver qué ejercicios sumaron.</p></article>`;
 }
 function historyPage() {
   const sessions = state.sessions
@@ -619,7 +610,7 @@ function progressPage() {
               )
         }</div></article></div>`
       : progressTab === "strength"
-        ? `${metrics()}<div class="grid-2">${muscleVolumeCard()}<article class="card"><div class="section-heading"><div><h2>Progreso por ejercicio</h2><p>Mejor carga realizada en cada sesión</p></div></div><div class="field"><label for="progress-exercise">Ejercicio</label><select id="progress-exercise">${exerciseCatalog()
+        ? `${periodControl()}${metrics()}<div class="grid-2">${muscleVolumeCard()}<article class="card"><div class="section-heading"><div><h2>Progreso por ejercicio</h2><p>Mejor carga realizada en cada sesión</p></div></div><div class="field"><label for="progress-exercise">Ejercicio</label><select id="progress-exercise">${exerciseCatalog()
             .map((e) => `<option value="${e.id}">${esc(e.name)}</option>`)
             .join(
               "",
@@ -1056,10 +1047,13 @@ function startSession(routine = null) {
   if (!routine) exerciseModal(session.id);
 }
 function makeExercise(ex) {
+  const roles = exerciseMuscles(ex);
   return {
     exerciseId: ex.id,
     name: ex.name,
     muscle: ex.muscle,
+    primaryMuscles: roles.primary,
+    secondaryMuscles: roles.secondary,
     sets: Array.from({ length: 3 }, () => ({
       kg: 0,
       reps: 10,
@@ -1078,12 +1072,23 @@ function exerciseModal(sessionId) {
     const q = normalize($("#exercise-search").value);
     $("#exercise-list").innerHTML =
       exerciseCatalog()
-        .filter((e) =>
-          normalize(e.name + " " + e.muscle + " " + e.equipment).includes(q),
-        )
+        .filter((e) => {
+          const roles = exerciseMuscles(e);
+          const text = normalize(
+            [e.name, e.equipment, ...roles.primary, ...roles.secondary].join(
+              " ",
+            ),
+          );
+          return q
+            .split(/\s+/)
+            .every(
+              (term) =>
+                text.includes(term) || text.replaceAll(" ", "").includes(term),
+            );
+        })
         .map(
           (e) =>
-            `<div class="exercise-picker"><div class="food-emoji">🏋️</div><div><h3>${esc(e.name)}</h3><p>${esc(e.muscle)} · ${esc(e.equipment)}</p></div>${iconButton("plus", "select-exercise", `Añadir ${e.name}`, `data-id="${e.id}" data-session="${sessionId}"`)}</div>`,
+            `<div class="exercise-picker"><div class="food-emoji">🏋️</div><div><h3>${esc(e.name)}</h3><p>${esc(exerciseMuscles(e).primary.join(" + "))} · ${esc(e.equipment)}</p><p>${exerciseMuscles(e).secondary.length ? "Indirectas: " + esc(exerciseMuscles(e).secondary.join(", ")) : "Sin músculos secundarios asignados"}</p></div>${iconButton("plus", "select-exercise", `Añadir ${e.name}`, `data-id="${e.id}" data-session="${sessionId}"`)}</div>`,
         )
         .join("") ||
       empty(
@@ -1098,7 +1103,7 @@ function customExerciseModal(sessionId) {
   openModal(
     "Crea tu ejercicio.",
     "Se añadirá a esta sesión y podrás repetirlo copiando la sesión.",
-    `<form id="custom-exercise-form"><div class="form-grid"><div class="field wide"><label for="exercise-name">Nombre</label><input id="exercise-name" name="name" maxlength="100" required placeholder="Ej. Remo en máquina" autofocus></div><div class="field wide"><label for="exercise-muscle">Grupo muscular principal</label><select id="exercise-muscle" name="muscle">${muscleNames.map((m) => `<option>${m}</option>`).join("")}</select></div></div><div class="modal-footer"><button type="button" class="btn" data-action="close">Cancelar</button><button class="btn primary" type="submit">Añadir ejercicio</button></div></form>`,
+    `<form id="custom-exercise-form"><div class="form-grid"><div class="field wide"><label for="exercise-name">Nombre</label><input id="exercise-name" name="name" maxlength="100" required placeholder="Ej. Remo en máquina" autofocus></div><div class="field wide"><label for="exercise-muscle">Grupo muscular principal</label><select id="exercise-muscle" name="muscle">${muscleNames.map((m) => `<option>${m}</option>`).join("")}</select></div><fieldset class="field wide secondary-muscles"><legend>Músculos secundarios · opcional</legend><div class="muscle-checkboxes">${muscleNames.map((m) => `<label><input type="checkbox" name="secondary" value="${m}"> ${m}</label>`).join("")}</div></fieldset></div><div class="modal-footer"><button type="button" class="btn" data-action="close">Cancelar</button><button class="btn primary" type="submit">Añadir ejercicio</button></div></form>`,
   );
   $("#custom-exercise-form").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -1110,10 +1115,60 @@ function customExerciseModal(sessionId) {
         id: "exercise-" + uid(),
         name: d.get("name").trim(),
         muscle: d.get("muscle"),
+        primaryMuscles: [d.get("muscle")],
+        secondaryMuscles: d
+          .getAll("secondary")
+          .filter((m) => m !== d.get("muscle")),
       }),
     );
     closeModal();
     save("Ejercicio añadido.");
+  });
+}
+function editExerciseMuscles(sessionId, index) {
+  const exercise = state.sessions.find((s) => s.id === sessionId).exercises[
+    index
+  ];
+  const roles = exerciseMuscles(exercise);
+  openModal(
+    "Músculos de este ejercicio",
+    esc(exercise.name),
+    `<form id="exercise-muscles-form"><p class="help-text">Ajusta la participación en esta sesión. Cada músculo puede recibir una serie directa, una indirecta o ninguna por cada serie completada.</p><table class="roles-table"><thead><tr><th>Músculo</th><th>Directo</th><th>Indirecto</th><th>No cuenta</th></tr></thead><tbody>${muscleNames
+      .map(
+        (m, i) =>
+          `<tr><th scope="row">${m}</th>${[
+            ["direct", "Directo"],
+            ["indirect", "Indirecto"],
+            ["none", "No cuenta"],
+          ]
+            .map(
+              ([role, label]) =>
+                `<td><input type="radio" name="muscle-${i}" value="${role}" aria-label="${m}: ${label.toLowerCase()}" ${(role === "direct" && roles.primary.includes(m)) || (role === "indirect" && roles.secondary.includes(m)) || (role === "none" && !roles.primary.includes(m) && !roles.secondary.includes(m)) ? "checked" : ""}></td>`,
+            )
+            .join("")}</tr>`,
+      )
+      .join(
+        "",
+      )}</tbody></table><p class="source-note">Selecciona al menos un músculo directo. Los cambios se aplican a todas las series de este ejercicio en esta sesión y actualizan el resumen del periodo.</p><div class="modal-footer"><button class="btn" type="button" data-action="close">Cancelar</button><button class="btn primary" type="submit">Guardar músculos</button></div></form>`,
+  );
+  $("#exercise-muscles-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const form = new FormData(event.target);
+    const primary = muscleNames.filter(
+      (_, i) => form.get("muscle-" + i) === "direct",
+    );
+    const secondary = muscleNames.filter(
+      (_, i) => form.get("muscle-" + i) === "indirect",
+    );
+    if (!primary.length) {
+      toast("Elige al menos un músculo directo.");
+      return;
+    }
+    exercise.primaryMuscles = primary;
+    exercise.secondaryMuscles = secondary;
+    exercise.muscle = primary[0];
+    closeModal();
+    save("Distribución de músculos actualizada.");
   });
 }
 function confirmModal(title, description, onConfirm, label = "Confirmar") {
@@ -1170,6 +1225,12 @@ async function importFile(e) {
   }
 }
 document.addEventListener("click", (e) => {
+  const period = e.target.closest("[data-training-window]");
+  if (period) {
+    state.trainingWindow = period.dataset.trainingWindow;
+    save();
+    return;
+  }
   const nav = e.target.closest("[data-nav]");
   if (nav) {
     view = nav.dataset.nav;
@@ -1313,6 +1374,9 @@ document.addEventListener("click", (e) => {
     }
     case "custom-exercise":
       customExerciseModal(d.id);
+      break;
+    case "edit-exercise-muscles":
+      editExerciseMuscles(d.session, +d.ei);
       break;
     case "rename-session": {
       const s = state.sessions.find((s) => s.id === d.id);

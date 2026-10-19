@@ -8,9 +8,171 @@ import {
   mealTotals,
   sessionVolume,
   weeklyStats,
+  trainingStats,
+  trainingDays,
   weightStats,
   validState,
 } from "../dist/core.js";
+import { exercises, exerciseMuscles } from "../dist/exercises.js";
+
+const exerciseSession = (date, id, count, options = {}) => ({
+  id: `session-${date}-${id}`,
+  date,
+  name: "Prueba",
+  finished: true,
+  feeling: 3,
+  notes: "",
+  exercises: [
+    {
+      exerciseId: id,
+      name: exercises.find((e) => e.id === id)?.name || id,
+      muscle: "Pecho",
+      sets: Array.from({ length: count }, () => ({
+        kg: id === "pushup" ? 0 : 60,
+        reps: 10,
+        rir: 2,
+        done: true,
+      })),
+      ...options,
+    },
+  ],
+});
+
+test("banca lunes, máquina miércoles y push ups domingo suman por músculo", () => {
+  const sessions = [
+    exerciseSession("2026-10-12", "bench", 3),
+    exerciseSession("2026-10-14", "machine-press", 4),
+    exerciseSession("2026-10-18", "pushup", 2),
+  ];
+  for (const mode of ["rolling", "week"]) {
+    const stats = trainingStats(sessions, "2026-10-18", mode);
+    assert.equal(stats.sets, 9);
+    assert.equal(stats.sessions, 3);
+    assert.equal(stats.volume, 4200);
+    assert.equal(stats.muscleBreakdown.Pecho.direct, 9);
+    assert.equal(stats.muscleBreakdown.Pecho.indirect, 0);
+    assert.equal(stats.muscleBreakdown.Deltoides.indirect, 9);
+    assert.equal(stats.muscleBreakdown.Tríceps.indirect, 9);
+    assert.equal(stats.muscleBreakdown.Deltoides.direct, 0);
+    assert.equal(stats.muscleBreakdown.Pecho.exercises.length, 3);
+    assert.equal(
+      stats.muscleBreakdown.Pecho.exercises.find(
+        (e) => e.exerciseId === "machine-press",
+      ).direct,
+      4,
+    );
+  }
+});
+
+test("al avanzar al lunes, 7 días móviles conserva miércoles y domingo, no el lunes anterior", () => {
+  const sessions = [
+    exerciseSession("2026-10-12", "bench", 3),
+    exerciseSession("2026-10-14", "machine-press", 4),
+    exerciseSession("2026-10-18", "pushup", 2),
+    exerciseSession("2026-10-20", "bench", 10),
+  ];
+  const rolling = trainingStats(sessions, "2026-10-19");
+  assert.equal(rolling.start, "2026-10-13");
+  assert.equal(rolling.end, "2026-10-19");
+  assert.equal(rolling.sets, 6);
+  assert.equal(rolling.muscleBreakdown.Pecho.direct, 6);
+  assert.equal(rolling.muscleBreakdown.Tríceps.indirect, 6);
+  const calendar = trainingStats(sessions, "2026-10-19", "week");
+  assert.equal(calendar.sets, 0);
+  assert.equal(calendar.start, "2026-10-19");
+  assert.deepEqual(trainingDays("2027-01-03"), [
+    "2026-12-28",
+    "2026-12-29",
+    "2026-12-30",
+    "2026-12-31",
+    "2027-01-01",
+    "2027-01-02",
+    "2027-01-03",
+  ]);
+});
+
+test("los límites móviles incluyen ambos extremos y excluyen registros posteriores", () => {
+  const sessions = ["2026-10-11", "2026-10-12", "2026-10-18", "2026-10-19"].map(
+    (d) => exerciseSession(d, "bench", 1),
+  );
+  assert.equal(trainingStats(sessions, "2026-10-18").sets, 2);
+  assert.equal(trainingStats(sessions, "2026-10-14", "week").sets, 1);
+});
+
+test("los roles editados prevalecen, sin duplicar un músculo dentro de una serie", () => {
+  const session = exerciseSession("2026-10-18", "bench", 3, {
+    primaryMuscles: ["Pecho", "Pecho"],
+    secondaryMuscles: ["Pecho", "Hombros", "Deltoides", "Tríceps", "Tríceps"],
+  });
+  const stats = trainingStats([session], "2026-10-18");
+  assert.equal(stats.sets, 3);
+  assert.equal(stats.muscleBreakdown.Pecho.total, 3);
+  assert.equal(stats.muscleBreakdown.Deltoides.indirect, 3);
+  assert.equal(stats.muscleBreakdown.Tríceps.total, 3);
+  const edited = exerciseSession("2026-10-18", "bench", 2, {
+    primaryMuscles: ["Tríceps"],
+    secondaryMuscles: ["Pecho"],
+  });
+  const result = trainingStats([edited], "2026-10-18");
+  assert.equal(result.muscleBreakdown.Tríceps.direct, 2);
+  assert.equal(result.muscleBreakdown.Pecho.indirect, 2);
+  assert.equal(result.muscleBreakdown.Deltoides, undefined);
+});
+
+test("series pendientes y peso corporal: el conteo muscular no depende de la carga", () => {
+  const session = exerciseSession("2026-10-18", "pushup", 3);
+  session.finished = false;
+  session.exercises[0].sets[2].done = false;
+  const stats = trainingStats([session], "2026-10-18");
+  assert.equal(stats.sets, 2);
+  assert.equal(stats.sessions, 0);
+  assert.equal(stats.volume, 0);
+  assert.equal(stats.muscleBreakdown.Pecho.direct, 2);
+  assert.equal(stats.muscleBreakdown.Tríceps.indirect, 2);
+});
+
+test("el catálogo conserva IDs anteriores y permite varias variantes por músculo", () => {
+  assert.equal(exercises.length, 68);
+  assert.equal(new Set(exercises.map((e) => e.id)).size, 68);
+  const legacy = [
+    "bench",
+    "incline",
+    "fly",
+    "pushup",
+    "pulldown",
+    "row",
+    "cable-row",
+    "pullup",
+    "squat",
+    "legpress",
+    "extension",
+    "lunge",
+    "rdl",
+    "legcurl",
+    "deadlift",
+    "hipthrust",
+    "kickback",
+    "ohp",
+    "lateral",
+    "facepull",
+    "curl",
+    "hammer",
+    "triceps",
+    "overhead",
+    "crunch",
+    "cablecrunch",
+    "calf",
+  ];
+  for (const id of legacy) assert.ok(exercises.some((e) => e.id === id));
+  assert.deepEqual(exerciseMuscles({ exerciseId: "bench", muscle: "Pecho" }), {
+    primary: ["Pecho"],
+    secondary: ["Deltoides", "Tríceps"],
+  });
+  assert.deepEqual(
+    exerciseMuscles({ exerciseId: "personal", muscle: "Hombros" }),
+    { primary: ["Deltoides"], secondary: [] },
+  );
+});
 
 test("porciones escalan calorías y macros sin redondear los registros", () => {
   const result = mealTotals([
@@ -128,6 +290,34 @@ test("importación rechaza valores imposibles, datos incompletos y fechas invál
   );
   assert.equal(validState({ version: 1 }), false);
   assert.equal(validState({ ...state, sessions: [null] }), false);
+  const modern = exerciseSession("2026-10-18", "bench", 3, {
+    primaryMuscles: ["Pecho"],
+    secondaryMuscles: ["Deltoides", "Tríceps"],
+  });
+  assert.equal(
+    validState({ ...state, sessions: [modern], trainingWindow: "rolling" }),
+    true,
+  );
+  assert.equal(
+    validState({
+      ...state,
+      sessions: [
+        exerciseSession("2026-10-18", "bench", 3, { primaryMuscles: [] }),
+      ],
+    }),
+    false,
+  );
+  assert.equal(
+    validState({
+      ...state,
+      sessions: [
+        exerciseSession("2026-10-18", "bench", 3, {
+          secondaryMuscles: ["Inexistente"],
+        }),
+      ],
+    }),
+    false,
+  );
   const food = {
     id: "custom-test",
     name: "Comida",

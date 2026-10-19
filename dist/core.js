@@ -1,3 +1,5 @@
+import { exerciseMuscles, muscleNames } from "./exercises.js";
+
 export const sum = (items, fn) => items.reduce((n, item) => n + fn(item), 0);
 export function localDate(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -21,34 +23,88 @@ export function mealTotals(entries) {
   );
 }
 export function completedSets(session) {
-  return (session?.exercises || []).flatMap((e) =>
-    e.sets
+  return (session?.exercises || []).flatMap((e) => {
+    const { primary, secondary } = exerciseMuscles(e);
+    return e.sets
       .filter((s) => s.done)
-      .map((s) => ({ ...s, exerciseId: e.exerciseId, muscle: e.muscle })),
-  );
+      .map((s) => ({
+        ...s,
+        exerciseId: e.exerciseId,
+        name: e.name || e.exerciseId,
+        muscle: primary[0],
+        primaryMuscles: primary,
+        secondaryMuscles: secondary,
+      }));
+  });
 }
 export function sessionVolume(session) {
   return sum(completedSets(session), (s) => s.kg * s.reps);
 }
-export function weeklyStats(sessions, date) {
-  const days = weekDays(date),
-    week = sessions.filter((s) => days.includes(s.date));
-  const sets = week.flatMap(completedSets),
-    muscles = {};
-  for (const s of sets) muscles[s.muscle] = (muscles[s.muscle] || 0) + 1;
+export function trainingDays(date, mode = "rolling") {
+  return mode === "week"
+    ? weekDays(date)
+    : Array.from({ length: 7 }, (_, i) => shiftDate(date, i - 6));
+}
+export function trainingStats(sessions, date, mode = "rolling") {
+  const days = trainingDays(date, mode);
+  const period = sessions.filter(
+    (s) => days.includes(s.date) && s.date <= date,
+  );
+  const sets = period.flatMap(completedSets),
+    muscles = Object.create(null),
+    muscleBreakdown = Object.create(null);
+  for (const set of sets) {
+    for (const [role, names] of [
+      ["direct", set.primaryMuscles],
+      ["indirect", set.secondaryMuscles],
+    ]) {
+      for (const muscle of names) {
+        const row = (muscleBreakdown[muscle] ||= {
+          direct: 0,
+          indirect: 0,
+          total: 0,
+          exercises: [],
+        });
+        row[role]++;
+        row.total++;
+        let ex = row.exercises.find(
+          (e) => e.exerciseId === set.exerciseId && e.name === set.name,
+        );
+        if (!ex) {
+          ex = {
+            exerciseId: set.exerciseId,
+            name: set.name,
+            direct: 0,
+            indirect: 0,
+            total: 0,
+          };
+          row.exercises.push(ex);
+        }
+        ex[role]++;
+        ex.total++;
+        if (role === "direct") muscles[muscle] = (muscles[muscle] || 0) + 1;
+      }
+    }
+  }
   const withRir = sets.filter(
     (s) => s.rir !== "" && s.rir !== null && s.rir !== undefined,
   );
   return {
-    sessions: week.filter((s) => s.finished).length,
+    sessions: period.filter((s) => s.finished).length,
     sets: sets.length,
     volume: sum(sets, (s) => s.kg * s.reps),
     rir: withRir.length
       ? sum(withRir, (s) => Number(s.rir)) / withRir.length
       : null,
     muscles,
+    muscleBreakdown,
+    start: days[0],
+    end: date,
+    mode,
   };
 }
+export const weeklyStats = (sessions, date) =>
+  trainingStats(sessions, date, "week");
 export function weightStats(weights, date) {
   const entries = weights
     .filter((w) => w.date <= date)
@@ -88,8 +144,18 @@ export function validState(s) {
   const array = (a, check, max = 100000) =>
     Array.isArray(a) && a.length <= max && a.every(check);
   const goals = s?.goals;
+  const roles = (list, primary = false) =>
+    list === undefined ||
+    (array(
+      list,
+      (m) => muscleNames.includes(m) || m === "Hombros",
+      muscleNames.length,
+    ) &&
+      (!primary || list.length > 0));
   return Boolean(
     s?.version === 1 &&
+      (s.trainingWindow === undefined ||
+        ["rolling", "week"].includes(s.trainingWindow)) &&
       goals &&
       text(goals.name, 40) &&
       num(goals.kcal, 1, 10000) &&
@@ -127,6 +193,8 @@ export function validState(s) {
               id(e.exerciseId) &&
               text(e.name) &&
               text(e.muscle) &&
+              roles(e.primaryMuscles, true) &&
+              roles(e.secondaryMuscles) &&
               array(
                 e.sets,
                 (t) =>
