@@ -1542,6 +1542,10 @@ body {
   background: #eef3f5;
   color: #426875;
 }
+.exercise-art-detailed {
+  width: 100px;
+  height: 76px;
+}
 .exercise-art.group-legs {
   background: #f7f1e7;
   color: #8a6946;
@@ -1553,6 +1557,10 @@ body {
 .exercise-top > .exercise-art {
   width: 62px;
   height: 48px;
+}
+.exercise-top > .exercise-art-detailed {
+  width: 88px;
+  height: 66px;
 }
 .exercise-top > div:not(.small-symbol) {
   min-width: 0;

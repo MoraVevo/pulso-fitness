@@ -1,4 +1,5 @@
 import { exercises, exerciseMuscles } from "./exercises.js";
+import { pullIllustration } from "./pull-illustrations.js";
 
 export const movementGroups = [
   { id: "push", name: "Empuje", detail: "Pecho, hombros y tríceps" },
@@ -165,59 +166,6 @@ const poses = {
     head(31, 44) +
     body("M42 47H70L86 70H100M46 47L49 22L30 25") +
     load(e, 29, 24),
-  pulldown: (e) =>
-    equipment("M16 13H103V77M28 69H80M35 69V78M26 9h54") +
-    head(53, 35) +
-    body("M53 47V63L76 66L82 77M53 48L31 36L28 23M53 48L75 36L78 23") +
-    load(e, 53, 22),
-  pullup: () =>
-    equipment("M14 11H106M22 11V78M98 11V78") +
-    head(60, 30) +
-    body(
-      "M60 42V61L74 73L84 68M60 61L46 73L36 68M60 44L39 25L33 12M60 44L81 25L87 12",
-    ),
-  row: (e) =>
-    floor +
-    head(35, 23) +
-    body("M43 32L68 47L61 60L70 76M68 47L86 61L95 76M44 35L37 54L52 60") +
-    load(e, 53, 61),
-  "seated-row": (e) =>
-    equipment("M19 63H61M26 63V78M99 14V77M91 73h15") +
-    head(38, 23) +
-    body("M38 35L42 57L70 61L88 74M39 39L56 47L68 41") +
-    load(e, 71, 41),
-  pullover: (e) =>
-    floor +
-    head(47, 21) +
-    body("M49 33L63 52L58 64L48 77M63 52L78 65L85 77M51 37L71 54L83 60") +
-    load(e, 83, 60),
-  "rear-delt": () =>
-    floor +
-    head(58, 28) +
-    body(
-      "M58 40V58M58 58L46 76M58 58L70 76M58 42L31 43L17 33M58 42L85 43L101 33",
-    ) +
-    equipment("M12 29v9m10 -9v9M12 34h10M97 29v9m10 -9v9M97 34h10"),
-  facepull: (e) =>
-    head(42, 24) +
-    body("M42 36V57M42 57L31 77M42 57L57 77M42 39L66 45L57 28") +
-    load(e, 63, 28),
-  shrug: (e) =>
-    head(60, 17) +
-    body(
-      "M60 29V57M60 57L47 77M60 57L73 77M60 31L41 36L38 55M60 31L79 36L82 55",
-    ) +
-    load(e, 38, 57) +
-    equipment("M76 53v8m12 -8v8M76 57h12"),
-  curl: (e) =>
-    head(52, 19) +
-    body("M52 31V57M52 57L39 77M52 57L67 77M52 36L65 52L78 34") +
-    load(e, 79, 33),
-  wrist: (e) =>
-    equipment("M28 59H79M33 59V78M72 59V78") +
-    head(39, 22) +
-    body("M40 34L49 50L66 57L64 77M43 38L57 48H79L86 56") +
-    load(e, 88, 58),
   squat: (e) =>
     floor +
     head(51, 20) +
@@ -288,6 +236,9 @@ const poses = {
 };
 export function exerciseSvg(ex) {
   const { pattern, group } = exerciseMovement(ex);
+  if (group === "pull") {
+    return `<svg class="exercise-art exercise-art-detailed group-pull" data-illustration="${pattern}" viewBox="0 0 240 180" fill="none" stroke="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${pullIllustration(ex.exerciseId || ex.id, pattern)}</svg>`;
+  }
   const original = exercises.find(
     (item) => item.id === (ex.exerciseId || ex.id),
   );

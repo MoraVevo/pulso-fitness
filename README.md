@@ -22,7 +22,7 @@ npm run check
 - 53 alimentos en español, extraídos del archivo oficial USDA SR28, con identificador NDB, nombre original y valores por 100 g.
 - Registro por gramos y porciones orientativas, favoritos, recientes, alimentos propios, edición, duplicación y repetición del día anterior.
 - 68 ejercicios agrupados en empuje, jale, pierna y core, con búsqueda por nombre, equipo, músculo y patrón. Los personalizados también pueden elegir su grupo.
-- 34 ilustraciones SVG originales para representar las familias de movimientos, con variantes de equipo en el selector, las rutinas y las sesiones.
+- Ilustraciones SVG originales por movimiento, con 20 dibujos individuales de jale: figuras humanas con volumen, posturas, agarres y equipos diferenciados en el selector, las rutinas y las sesiones.
 - Cuatro plantillas y rutinas propias guardadas: crear, editar, ordenar ejercicios, definir series/repeticiones/RIR y reutilizar. También se puede guardar una sesión como rutina; cada sesión nueva reinicia las casillas de series completadas.
 - Series, carga, repeticiones, RIR, sensación, historial y progreso por ejercicio.
 - Series directas e indirectas por músculo, con desglose de los ejercicios que contribuyen. Un mismo ejercicio puede tener varios músculos directos y secundarios, editables en cada sesión.
@@ -69,6 +69,7 @@ Las medias nutricionales omiten días sin registros y pueden incluir días incom
 - `dist/core.js`: cálculos puros y validación de copias.
 - `dist/app.js`: interfaz, persistencia y flujos de registro.
 - `dist/exercise-visuals.js`: clasificación de patrones y dibujos SVG por movimiento.
+- `dist/pull-illustrations.js`: ilustraciones vectoriales de los 20 ejercicios de jale.
 - `data/build-foods.mjs`: extracción reproducible de la selección USDA.
 - `tests/core.test.mjs`: verificaciones con el ejecutor nativo de Node.js.
 - `.openai/hosting.json`: configuración conservada del alojamiento anterior en Sites; GitHub Pages publica `dist/` con su propio workflow.
