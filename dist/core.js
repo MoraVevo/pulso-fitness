@@ -1,4 +1,5 @@
 import { exerciseMuscles, muscleNames } from "./exercises.js";
+import { exerciseRegions, validMuscleRegions } from "./muscle-regions.js";
 
 export const sum = (items, fn) => items.reduce((n, item) => n + fn(item), 0);
 export function localDate(date = new Date()) {
@@ -25,6 +26,7 @@ export function mealTotals(entries) {
 export function completedSets(session) {
   return (session?.exercises || []).flatMap((e) => {
     const { primary, secondary } = exerciseMuscles(e);
+    const regions = exerciseRegions(e);
     return e.sets
       .filter((s) => s.done)
       .map((s) => ({
@@ -34,6 +36,7 @@ export function completedSets(session) {
         muscle: primary[0],
         primaryMuscles: primary,
         secondaryMuscles: secondary,
+        muscleRegions: regions,
       }));
   });
 }
@@ -104,6 +107,18 @@ export function trainingDays(date, mode = "rolling") {
     ? weekDays(date)
     : Array.from({ length: 7 }, (_, i) => shiftDate(date, i - 6));
 }
+const contribution = () => ({ direct: 0, indirect: 0, total: 0, exercises: [] });
+function addContribution(row, set, role) {
+  row[role]++;
+  row.total++;
+  let ex = row.exercises.find((e) => e.exerciseId === set.exerciseId && e.name === set.name);
+  if (!ex) {
+    ex = { exerciseId: set.exerciseId, name: set.name, direct: 0, indirect: 0, total: 0 };
+    row.exercises.push(ex);
+  }
+  ex[role]++;
+  ex.total++;
+}
 export function trainingStats(sessions, date, mode = "rolling") {
   const days = trainingDays(date, mode);
   const period = sessions.filter(
@@ -119,28 +134,19 @@ export function trainingStats(sessions, date, mode = "rolling") {
     ]) {
       for (const muscle of names) {
         const row = (muscleBreakdown[muscle] ||= {
-          direct: 0,
-          indirect: 0,
-          total: 0,
-          exercises: [],
+          ...contribution(), regions: Object.create(null), unspecified: contribution(),
         });
-        row[role]++;
-        row.total++;
-        let ex = row.exercises.find(
-          (e) => e.exerciseId === set.exerciseId && e.name === set.name,
-        );
-        if (!ex) {
-          ex = {
-            exerciseId: set.exerciseId,
-            name: set.name,
-            direct: 0,
-            indirect: 0,
-            total: 0,
-          };
-          row.exercises.push(ex);
+        addContribution(row, set, role);
+        const details = Object.hasOwn(set.muscleRegions, muscle) ? set.muscleRegions[muscle] : null;
+        if (!details || (!details.direct.length && !details.indirect.length)) {
+          addContribution(row.unspecified, set, role);
+        } else {
+          for (const detailRole of ["direct", "indirect"]) {
+            for (const region of details[detailRole]) {
+              addContribution(row.regions[region] ||= contribution(), set, detailRole);
+            }
+          }
         }
-        ex[role]++;
-        ex.total++;
         if (role === "direct") muscles[muscle] = (muscles[muscle] || 0) + 1;
       }
     }
@@ -220,6 +226,7 @@ export function validState(s) {
       ["push", "pull", "legs", "core"].includes(e.movement)) &&
     roles(e.primaryMuscles, true) &&
     roles(e.secondaryMuscles) &&
+    validMuscleRegions(e.muscleRegions, [...exerciseMuscles(e).primary, ...exerciseMuscles(e).secondary]) &&
     array(
       e.sets,
       (t) =>

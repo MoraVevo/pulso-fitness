@@ -21,6 +21,7 @@ import {
   exerciseMuscles,
   canonicalMuscle,
 } from "./exercises.js";
+import { muscleRegions, exerciseRegions } from "./muscle-regions.js";
 
 import {
   movementGroups,
@@ -181,6 +182,7 @@ const exerciseCatalog = () => [
             muscle: e.muscle,
             primaryMuscles: exerciseMuscles(e).primary,
             secondaryMuscles: exerciseMuscles(e).secondary,
+            muscleRegions: e.muscleRegions,
             equipment: e.equipment || "Personalizado",
             movement: e.movement,
           },
@@ -708,8 +710,8 @@ function muscleVolumeCard() {
   const names = [
     ...new Set([...muscleNames, ...Object.keys(stats.muscleBreakdown)]),
   ];
-  return `<article class="card muscle-volume"><div class="section-heading"><div><h2>Series por músculo</h2><p>${periodLabel()} · ${dateLabel(stats.start)} — ${dateLabel(stats.end)}</p></div>${icon("chart")}</div><div class="chart-legend"><span><i class="bullet"></i> Directas</span><span><i class="bullet" style="background:#bdd19f"></i> Indirectas</span></div><table class="muscle-table"><caption class="sr-only">Series completadas por músculo en ${periodLabel().toLowerCase()}</caption><thead><tr><th>Músculo</th><th>Directas</th><th>Indirectas</th><th>Total</th></tr></thead><tbody>${names
-    .map((m) => {
+  return `<article class="card muscle-volume"><div class="section-heading"><div><h2>Series por músculo</h2><p>${periodLabel()} · ${dateLabel(stats.start)} — ${dateLabel(stats.end)}</p></div>${icon("chart")}</div><div class="chart-legend"><span><i class="bullet"></i> Directas</span><span><i class="bullet" style="background:#bdd19f"></i> Indirectas</span></div><p class="muscle-detail-hint">Abre un grupo para ver el detalle de sus músculos.</p><table class="muscle-table"><caption class="sr-only">Series completadas por grupo en ${periodLabel().toLowerCase()}</caption><thead><tr><th>Grupo</th><th>Directas</th><th>Indirectas</th><th>Total</th></tr></thead><tbody>${names
+    .map((m, index) => {
       const row = stats.muscleBreakdown[m] || {
         direct: 0,
         indirect: 0,
@@ -717,11 +719,24 @@ function muscleVolumeCard() {
         exercises: [],
       };
       const label = `${esc(m)}<div class="muscle-track" aria-hidden="true"><i style="width:${(row.direct / max) * 100}%"></i><i class="secondary" style="width:${(row.indirect / max) * 100}%"></i></div>`;
-      return `<tr class="${row.total ? "has-volume" : ""}" data-muscle="${esc(m)}"><td>${row.total ? `<details><summary>${label}</summary><div class="muscle-contributions">${row.exercises.map((ex) => `<div><strong>${esc(ex.name)}</strong><span>${ex.direct ? `${ex.direct} directas` : ""}${ex.direct && ex.indirect ? " · " : ""}${ex.indirect ? `${ex.indirect} indirectas` : ""}</span></div>`).join("")}</div></details>` : label}</td><td data-count="direct">${row.direct}</td><td data-count="indirect">${row.indirect}</td><td data-count="total"><strong>${row.total}</strong></td></tr>`;
+      const open = expandedMuscles.has(m);
+      const detailId = `muscle-detail-${index}`;
+      return `<tr class="${row.total ? "has-volume" : ""}" data-muscle="${esc(m)}"><td><button type="button" class="muscle-group-toggle" data-action="toggle-muscle" data-group="${esc(m)}" aria-label="Detalle de ${esc(m)}" aria-expanded="${open}" aria-controls="${detailId}">${label}</button></td><td data-count="direct">${row.direct}</td><td data-count="indirect">${row.indirect}</td><td data-count="total"><strong>${row.total}</strong></td></tr><tr class="muscle-detail-row" id="${detailId}" ${open ? "" : "hidden"}><td colspan="4">${muscleDetailMarkup(m, row)}</td></tr>`;
     })
     .join(
       "",
-    )}</tbody></table><p class="source-note">${stats.sets} series realizadas. Una misma serie puede participar en varios músculos, pero se cuenta una sola vez en el total de series de la sesión. Toca un músculo para ver qué ejercicios sumaron.</p></article>`;
+    )}</tbody></table><p class="source-note">${stats.sets} series realizadas. El total reúne participaciones directas e indirectas; no mide el mismo estímulo ni indica exceso de entrenamiento. Una serie cuenta una sola vez por grupo aunque trabaje varios de sus músculos.</p></article>`;
+}
+const expandedMuscles = new Set();
+function muscleContributions(row) {
+  return `<div class="muscle-contributions">${row.exercises.map((ex) => `<div><strong>${esc(ex.name)}</strong><span>${ex.direct ? `${ex.direct} directas` : ""}${ex.direct && ex.indirect ? " · " : ""}${ex.indirect ? `${ex.indirect} indirectas` : ""}</span></div>`).join("")}</div>`;
+}
+function muscleDetailMarkup(group, row) {
+  const regions = Object.hasOwn(muscleRegions, group) ? muscleRegions[group] : [];
+  const empty = { direct: 0, indirect: 0, total: 0, exercises: [] };
+  const entries = regions.map(([id, name]) => [id, name, row.regions?.[id] || empty]);
+  if (row.unspecified?.total) entries.push(["unspecified", "Sin especificar", row.unspecified]);
+  return `<div class="muscle-detail-panel"><table class="muscle-region-table"><caption>Detalle de ${esc(group)}</caption><thead><tr><th>Músculo / porción</th><th>Directas</th><th>Indirectas</th></tr></thead><tbody>${entries.map(([id, name, counts]) => `<tr data-region="${id}" class="${counts.total ? "has-volume" : ""}"><td>${counts.total ? `<details><summary>${esc(name)}</summary>${muscleContributions(counts)}</details>` : esc(name)}</td><td data-count="direct">${counts.direct}</td><td data-count="indirect">${counts.indirect}</td></tr>`).join("")}</tbody></table>${row.unspecified?.total ? `<p class="muscle-detail-note">Hay series sin detalle muscular. Puedes asignarlo desde el botón de músculos del ejercicio en su sesión.</p>` : ""}<p class="muscle-detail-note">Una serie puede participar en varias filas. La asignación del catálogo es orientativa y puedes editarla.</p>${row.total ? `<details class="muscle-group-exercises"><summary>Ejercicios del grupo</summary>${muscleContributions(row)}</details>` : ""}</div>`;
 }
 function historyPage() {
   const sessions = state.sessions
@@ -1309,6 +1324,7 @@ function makeExercise(ex, date = selectedDate) {
     muscle: ex.muscle,
     primaryMuscles: roles.primary,
     secondaryMuscles: roles.secondary,
+    muscleRegions: exerciseRegions(ex),
     sets: Array.from({ length: 3 }, () => ({
       kg: load.kg,
       unit,
@@ -1586,11 +1602,22 @@ function customExerciseModal(sessionId) {
     save("Ejercicio añadido.");
   });
 }
+function regionEditorMarkup(regions, roles) {
+  return `<details class="muscle-region-editor"><summary>Detalle por músculo / porción</summary><p class="help-text">Ajusta qué músculos participan dentro de cada grupo seleccionado. Si no asignas ninguno, sus series quedarán sin especificar.</p>${muscleNames.map((group) => {
+    const active = roles.primary.includes(group) || roles.secondary.includes(group);
+    const counts = regions[group] || { direct: [], indirect: [] };
+    return `<details class="region-editor-group" data-region-editor="${group}" ${active ? "" : "hidden"}><summary>${group}</summary>${muscleRegions[group].map(([id, name]) => {
+      const current = counts.direct.includes(id) ? "direct" : counts.indirect.includes(id) ? "indirect" : "none";
+      return `<label class="region-role-field"><span>${name}</span><select name="region-${id}" aria-label="${group}: ${name}" ${active ? "" : "disabled"}>${[["direct", "Directo"], ["indirect", "Indirecto"], ["none", "Sin asignar"]].map(([value, text]) => `<option value="${value}" ${value === current ? "selected" : ""}>${text}</option>`).join("")}</select></label>`;
+    }).join("")}</details>`;
+  }).join("")}</details>`;
+}
 function editExerciseMuscles(sessionId, index) {
   const exercise = state.sessions.find((s) => s.id === sessionId).exercises[
     index
   ];
   const roles = exerciseMuscles(exercise);
+  const regions = exerciseRegions(exercise);
   openModal(
     "Músculos de este ejercicio",
     esc(exercise.name),
@@ -1610,8 +1637,27 @@ function editExerciseMuscles(sessionId, index) {
       )
       .join(
         "",
-      )}</tbody></table><p class="source-note">Selecciona al menos un músculo directo. Los cambios se aplican a todas las series de este ejercicio en esta sesión y actualizan el resumen del periodo.</p><div class="modal-footer"><button class="btn" type="button" data-action="close">Cancelar</button><button class="btn primary" type="submit">Guardar músculos</button></div></form>`,
+      )}</tbody></table>${regionEditorMarkup(regions, roles)}<p class="source-note">Selecciona al menos un músculo directo. Los cambios se aplican a todas las series de este ejercicio en esta sesión y actualizan el resumen del periodo.</p><div class="modal-footer"><button class="btn" type="button" data-action="close">Cancelar</button><button class="btn primary" type="submit">Guardar músculos</button></div></form>`,
   );
+  $("#exercise-muscles-form").addEventListener("change", (event) => {
+    if (event.target.name.startsWith("region-")) {
+      const editor = event.target.closest("[data-region-editor]");
+      const values = [...editor.querySelectorAll("select")].map((select) => select.value);
+      const role = values.includes("direct") ? "direct" : values.includes("indirect") ? "indirect" : null;
+      const index = muscleNames.indexOf(editor.dataset.regionEditor);
+      if (role) event.currentTarget.querySelector(`input[name="muscle-${index}"][value="${role}"]`).checked = true;
+      return;
+    }
+    if (!event.target.name.startsWith("muscle-")) return;
+    const index = Number(event.target.name.slice(7));
+    const editor = document.querySelector(`[data-region-editor="${muscleNames[index]}"]`);
+    if (!editor) return;
+    editor.hidden = event.target.value === "none";
+    for (const select of editor.querySelectorAll("select")) {
+      select.disabled = editor.hidden;
+      if (!editor.hidden && select.value !== "none") select.value = event.target.value;
+    }
+  });
   $("#exercise-muscles-form").addEventListener("submit", (event) => {
     event.preventDefault();
     const form = new FormData(event.target);
@@ -1628,6 +1674,10 @@ function editExerciseMuscles(sessionId, index) {
     exercise.primaryMuscles = primary;
     exercise.secondaryMuscles = secondary;
     exercise.muscle = primary[0];
+    exercise.muscleRegions = Object.fromEntries([...primary, ...secondary].map((group) => [group, {
+      direct: muscleRegions[group].filter(([id]) => form.get("region-" + id) === "direct").map(([id]) => id),
+      indirect: muscleRegions[group].filter(([id]) => form.get("region-" + id) === "indirect").map(([id]) => id),
+    }]));
     closeModal();
     save("Distribución de músculos actualizada.");
   });
@@ -1710,6 +1760,15 @@ document.addEventListener("click", (event) => {
   }
 });
 document.addEventListener("click", (e) => {
+  const muscleToggle = e.target.closest('[data-action="toggle-muscle"]');
+  if (muscleToggle) {
+    const open = muscleToggle.getAttribute("aria-expanded") !== "true";
+    muscleToggle.setAttribute("aria-expanded", String(open));
+    document.getElementById(muscleToggle.getAttribute("aria-controls")).hidden = !open;
+    if (open) expandedMuscles.add(muscleToggle.dataset.group);
+    else expandedMuscles.delete(muscleToggle.dataset.group);
+    return;
+  }
   const period = e.target.closest("[data-training-window]");
   if (period) {
     state.trainingWindow = period.dataset.trainingWindow;
