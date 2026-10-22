@@ -1629,6 +1629,84 @@ dialog[open]:has(.set-picker-modal) {
 .set-picker-modal .modal-footer { margin-top: 18px; padding-top: 16px; }
 .set-picker-modal .modal-footer .btn { min-height: 44px; }
 
+/* A small, persistent rest clock; its mobile position clears the bottom nav. */
+.rest-timer {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 26;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 44px;
+  align-items: center;
+  gap: 10px;
+  width: min(380px, calc(100% - 32px));
+  min-height: 72px;
+  padding: 9px 8px 9px 16px;
+  border: 1px solid #d9e5d1;
+  border-radius: 16px;
+  background: var(--paper);
+  box-shadow: 0 4px 16px #263b320a;
+}
+.rest-timer-context {
+  min-width: 0;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+.rest-timer-caption {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.rest-timer-caption .icon { width: 13px; height: 13px; color: var(--green); }
+.rest-timer-context strong {
+  display: block;
+  margin-top: 5px;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rest-timer-elapsed {
+  color: var(--green);
+  font: 700 25px/1.2 Manrope, sans-serif;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.rest-timer-stop {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: var(--soft);
+  color: var(--green);
+}
+.rest-timer-stop .icon { width: 17px; height: 17px; }
+body.has-rest-timer .main { padding-bottom: 120px; }
+body.has-rest-timer .toast { bottom: 110px; }
+@media (max-width: 720px) {
+  .rest-timer {
+    right: 12px;
+    left: 12px;
+    bottom: calc(83px + env(safe-area-inset-bottom));
+    width: auto;
+    gap: 8px;
+    padding-left: 12px;
+  }
+  body.has-rest-timer .main { padding-bottom: calc(180px + env(safe-area-inset-bottom)); }
+  body.has-rest-timer .toast { bottom: calc(168px + env(safe-area-inset-bottom)); }
+}
+
 /* Evita que los gestos de la interfaz cambien la escala de la aplicación. */
 html,
 body {

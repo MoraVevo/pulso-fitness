@@ -94,13 +94,60 @@ export function exerciseLoadSuggestion(sessions, exerciseId, date, equipment = "
   return { kg: 0, source: "starter" };
 }
 
+export function pendingSet({ recordedAt, ...set }) {
+  return { ...set, done: false };
+}
 export function routinePlan(exercises) {
   return structuredClone(exercises).map((ex) => ({
     ...ex,
     sets: (ex.sets.length ? ex.sets : [{ kg: 0, reps: "", rir: "" }]).map(
-      (set) => ({ ...set, done: false }),
+      pendingSet,
     ),
   }));
+}
+
+const timestamp = (value) => Number.isSafeInteger(value) && value > 0 && value <= 8640000000000000;
+
+// Persist an instant, not interval ticks: suspended pages recover elapsed time.
+export function recordSetReps(state, sessionId, exerciseIndex, setIndex, reps, now = Date.now()) {
+  const session = state.sessions.find((item) => item.id === sessionId);
+  const set = session?.exercises[exerciseIndex]?.sets[setIndex];
+  if (!set || (reps !== null && (!Number.isInteger(reps) || reps < 1 || reps > 200))) return false;
+  const wasDone = set.done;
+  set.reps = reps ?? "";
+  set.done = reps !== null;
+  if (!set.done && state.restTimer?.sessionId === sessionId && state.restTimer.startedAt === set.recordedAt) {
+    state.restTimer = null;
+  }
+  if (!wasDone && set.done && !set.recordedAt && !session.finished && timestamp(now)) {
+    set.recordedAt = now;
+    state.restTimer = { sessionId, startedAt: now };
+    return true;
+  }
+  return false;
+}
+
+export function currentRestTimer(state, now = Date.now()) {
+  const timer = state?.restTimer;
+  if (!timer || !timestamp(timer.startedAt)) return null;
+  const session = state.sessions.find((item) => item.id === timer.sessionId);
+  if (!session || session.finished) return null;
+  for (const [exerciseIndex, exercise] of session.exercises.entries()) {
+    const setIndex = exercise.sets.findIndex((set) => set.done && set.recordedAt === timer.startedAt);
+    if (setIndex >= 0) return {
+      ...timer, session, exercise, exerciseIndex, setIndex,
+      elapsedMs: Math.max(0, now - timer.startedAt),
+    };
+  }
+  return null;
+}
+
+export function elapsedTimeLabel(milliseconds) {
+  const seconds = Math.floor(Math.max(0, milliseconds) / 1000);
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor(seconds / 60) % 60;
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${hours ? `${hours}:` : ""}${pad(minutes)}:${pad(seconds % 60)}`;
 }
 export function trainingDays(date, mode = "rolling") {
   return mode === "week"
@@ -236,11 +283,15 @@ export function validState(s) {
           (num(t.reps, 1, 200) && Number.isInteger(t.reps))) &&
         (t.rir === "" || t.rir == null || num(t.rir, 0, 10)) &&
         (t.unit === undefined || ["kg", "lb"].includes(t.unit)) &&
+        (t.recordedAt === undefined || timestamp(t.recordedAt)) &&
         typeof t.done === "boolean",
       200,
     );
   return Boolean(
     s?.version === 1 &&
+      (s.restTimer === undefined || s.restTimer === null ||
+        (typeof s.restTimer === "object" && !Array.isArray(s.restTimer) &&
+          id(s.restTimer.sessionId) && timestamp(s.restTimer.startedAt))) &&
       (s.onboardingComplete === undefined ||
         typeof s.onboardingComplete === "boolean") &&
       (profile === undefined ||

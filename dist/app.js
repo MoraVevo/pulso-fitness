@@ -10,6 +10,10 @@ import {
   kgToLb,
   lbToKg,
   routinePlan,
+  pendingSet,
+  recordSetReps,
+  currentRestTimer,
+  elapsedTimeLabel,
   trainingStats,
   trainingDays,
   weightStats,
@@ -308,6 +312,7 @@ function persist() {
   }
 }
 function save(message) {
+  if (state.restTimer && !currentRestTimer(state)) state.restTimer = null;
   const ok = persist();
   render();
   if (message && ok) toast(message);
@@ -349,7 +354,35 @@ function render() {
         "",
       )}</nav><div class="sidebar-bottom"><div class="side-note">${icon("leaf")}<strong>El progreso está en lo simple.</strong><p>Un registro a la vez. Construye hábitos que se queden contigo.</p><button class="text-btn" data-action="export">Guardar una copia ${icon("download")}</button></div><div class="profile"><div class="avatar">${esc((state.goals.name || "Tú").slice(0, 2).toUpperCase())}</div><div><strong>${esc(state.goals.name || "Tu espacio")}</strong><small>${state.demo ? "Vista de ejemplo" : "Mi diario personal"}</small></div>${iconButton("settings", "settings", "Configurar objetivos")}</div></div></aside><main class="main"><header class="topbar"><div class="mobile-brand"><img src="icon.svg" alt="">pulso.</div><div class="breadcrumb">Mi espacio <span>/</span> <strong>${pageNames[view]}</strong></div><div class="top-actions"><span class="status-chip"><i></i>${storageFailed ? "Guardado no disponible" : "Guardado en este dispositivo"}</span><div class="date-control">${icon("calendar")}<input id="selected-date" type="date" value="${selectedDate}" max="${today()}" aria-label="Fecha del diario"></div>${iconButton("download", "export", "Exportar copia de seguridad")}</div></header>${state.demo ? `<div class="demo-banner"><span>${icon("spark")} Estás explorando con datos de ejemplo.</span><button class="text-btn" data-action="start">Empezar mis registros ${icon("arrow")}</button></div>` : ""}${storageFailed ? '<div class="info-box">El almacenamiento no está disponible. Exporta una copia antes de cerrar.</div>' : ""}<div id="page">${{ home: homePage, nutrition: nutritionPage, training: trainingPage, progress: progressPage, library: libraryPage, goals: goalsPage }[view]()}</div><footer class="footer"><span>${icon("heart")} Hecho para avanzar a tu ritmo.</span><span>${icon("lock")} Tus registros se guardan en este navegador.</span></footer></main><nav class="mobile-nav" aria-label="Navegación móvil">${[...nav, ["library", "book", "Biblioteca"], ["goals", "target", "Objetivos"]].map(([id, ico, label]) => `<button class="${view === id ? "active" : ""}" data-nav="${id}">${icon(ico)}${label}</button>`).join("")}</nav>`;
   bindPage();
+  $("#app").insertAdjacentHTML("beforeend", '<div id="rest-timer-slot"></div>');
+  syncRestTimer();
 }
+
+let restTimerTick = null;
+function syncRestTimer() {
+  clearTimeout(restTimerTick);
+  restTimerTick = null;
+  const slot = $("#rest-timer-slot");
+  const timer = currentRestTimer(state);
+  document.body.classList.toggle("has-rest-timer", Boolean(timer));
+  if (!slot) return;
+  if (!timer) {
+    slot.replaceChildren();
+    delete slot.dataset.timerKey;
+    return;
+  }
+  const key = JSON.stringify([timer.sessionId, timer.startedAt, timer.exercise.name, timer.setIndex]);
+  if (slot.dataset.timerKey !== key) {
+    slot.innerHTML = `<aside class="rest-timer" aria-label="Cronómetro de descanso"><button class="rest-timer-context" type="button" data-action="open-rest-session" aria-label="Volver a la serie ${timer.setIndex + 1} de ${esc(timer.exercise.name)}"><span class="rest-timer-caption">${icon("clock")}Desde la última serie</span><strong>${esc(timer.exercise.name)} · Serie ${timer.setIndex + 1}</strong></button><output class="rest-timer-elapsed" role="timer" aria-live="off" aria-label="Tiempo transcurrido"></output><button class="rest-timer-stop" type="button" data-action="stop-rest-timer" aria-label="Detener cronómetro">${icon("x")}</button></aside>`;
+    slot.dataset.timerKey = key;
+  }
+  slot.querySelector(".rest-timer-elapsed").textContent = elapsedTimeLabel(timer.elapsedMs);
+  if (!document.hidden) restTimerTick = setTimeout(syncRestTimer, 1000);
+}
+document.addEventListener("visibilitychange", syncRestTimer);
+window.addEventListener("pageshow", syncRestTimer);
+window.addEventListener("focus", syncRestTimer);
+window.addEventListener("pagehide", () => { clearTimeout(restTimerTick); restTimerTick = null; });
 function calorieCard() {
   const t = mealTotals(datedEntries()),
     remaining = state.goals.kcal - t.kcal;
@@ -673,8 +706,9 @@ function commitSetPicker() {
       ? picker.unit === "lb" ? lbToKg(picker.kg) : picker.kg
       : picker.originalKg;
   } else {
-    set[picker.field] = picker.value == null ? "" : picker.value;
-    if (picker.field === "reps") set.done = picker.value != null;
+    if (picker.field === "reps") {
+      recordSetReps(state, picker.sessionId, picker.exerciseIndex, picker.setIndex, picker.value);
+    } else set[picker.field] = picker.value == null ? "" : picker.value;
   }
   activeSetPicker = null;
   closeModal();
@@ -1804,6 +1838,23 @@ document.addEventListener("click", (e) => {
   if (!b) return;
   const d = b.dataset;
   switch (d.action) {
+    case "stop-rest-timer":
+      state.restTimer = null;
+      save();
+      break;
+    case "open-rest-session": {
+      const timer = currentRestTimer(state);
+      if (!timer) break;
+      currentSessionId = timer.sessionId;
+      selectedDate = timer.session.date;
+      view = "training";
+      tab = "session";
+      render();
+      const row = document.querySelector(`[data-set-row="${timer.exerciseIndex}-${timer.setIndex}"]`);
+      row?.scrollIntoView({ block: "center", behavior: "instant" });
+      row?.querySelector("button")?.focus({ preventScroll: true });
+      break;
+    }
     case "close":
       closeModal();
       break;
@@ -1995,10 +2046,7 @@ document.addEventListener("click", (e) => {
     case "add-set": {
       const s = state.sessions.find((s) => s.id === d.session),
         ex = s.exercises[+d.ei];
-      ex.sets.push({
-        ...(ex.sets.at(-1) || { kg: 0, unit: "kg", reps: "", rir: "" }),
-        done: false,
-      });
+      ex.sets.push(pendingSet(ex.sets.at(-1) || { kg: 0, unit: "kg", reps: "", rir: "" }));
       save();
       break;
     }
@@ -2044,8 +2092,7 @@ document.addEventListener("click", (e) => {
         notes: "",
         feeling: 3,
       };
-      for (const ex of copied.exercises)
-        for (const set of ex.sets) set.done = false;
+      copied.exercises = routinePlan(copied.exercises);
       state.sessions.push(copied);
       currentSessionId = copied.id;
       selectedDate = today();
