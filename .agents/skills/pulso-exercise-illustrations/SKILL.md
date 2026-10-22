@@ -11,7 +11,7 @@ The SVGs explain the movement at small card size. A viewer should be able to rec
 
 - Exercise IDs, names, equipment, and muscle roles are in `dist/exercises.js`.
 - Movement family assignment and `exerciseSvg()` are in `dist/exercise-visuals.js`.
-- Detailed Pulso exercise figures and reusable drawing helpers are in `dist/pull-illustrations.js`. Other movement families still use the local poses in `exercise-visuals.js`.
+- Detailed Pulso exercise figures are in `dist/pull-illustrations.js` and `dist/push-illustrations.js`; their shared drawing helpers are in `dist/exercise-drawing.js`. Other movement families and unknown custom push records still use the local poses in `exercise-visuals.js`.
 - The same `exerciseSvg()` appears in the exercise picker, routines, and training sessions. Review at the compact card size as well as a large preview.
 
 ## Drawing criteria

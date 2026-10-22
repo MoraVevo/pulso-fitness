@@ -1,5 +1,6 @@
 import { exercises, exerciseMuscles } from "./exercises.js";
 import { pullIllustration } from "./pull-illustrations.js";
+import { pushIllustration } from "./push-illustrations.js";
 
 export const movementGroups = [
   { id: "push", name: "Empuje", detail: "Pecho, hombros y tríceps" },
@@ -238,6 +239,11 @@ export function exerciseSvg(ex) {
   const { pattern, group } = exerciseMovement(ex);
   if (group === "pull") {
     return `<svg class="exercise-art exercise-art-detailed group-pull" data-illustration="${pattern}" viewBox="0 0 240 180" fill="none" stroke="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${pullIllustration(ex.exerciseId || ex.id, pattern)}</svg>`;
+  }
+  // Custom exercises retain their safe, equipment-neutral family illustration.
+  const push = group === "push" && pushIllustration(ex.exerciseId || ex.id);
+  if (push) {
+    return `<svg class="exercise-art exercise-art-detailed group-push" data-illustration="${pattern}" viewBox="0 0 240 180" fill="none" stroke="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${push}</svg>`;
   }
   const original = exercises.find(
     (item) => item.id === (ex.exerciseId || ex.id),
