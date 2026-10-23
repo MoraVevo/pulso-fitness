@@ -26,6 +26,7 @@ import {
   canonicalMuscle,
 } from "./exercises.js";
 import { muscleRegions, exerciseRegions } from "./muscle-regions.js";
+import { cardioActivities, cardioActivity, estimateCardioKcal, cardioWeightForDate, cardioTotals, dailyEnergy, validCardioRecord } from "./cardio.js";
 
 import {
   movementGroups,
@@ -159,6 +160,7 @@ const defaults = () => ({
   },
   entries: [],
   sessions: [],
+  cardio: [],
   weights: [],
   favorites: [],
   customFoods: [],
@@ -385,8 +387,9 @@ window.addEventListener("focus", syncRestTimer);
 window.addEventListener("pagehide", () => { clearTimeout(restTimerTick); restTimerTick = null; });
 function calorieCard() {
   const t = mealTotals(datedEntries()),
-    remaining = state.goals.kcal - t.kcal;
-  return `<article class="card"><div class="card-title"><h2 class="label-icon">${icon("fire")} Energía del día</h2><span class="tag">kcal</span></div><div class="calorie-body"><div class="ring" style="--value:${Math.min(100, (t.kcal / state.goals.kcal) * 100)}"><div class="ring-inner"><strong>${fmt(t.kcal)}</strong><small>kcal consumidas</small></div></div><div class="calorie-side"><div><div class="micro-label">Tu objetivo</div><strong>${fmt(state.goals.kcal)}<small>kcal</small></strong></div><div><div class="micro-label">${remaining >= 0 ? "Te quedan" : "Sobre el objetivo"}</div><strong>${fmt(Math.abs(remaining))}<small>kcal</small></strong></div></div></div><div class="card-foot"><span>${icon("target")} ${state.goals.mode === "lose" ? "Déficit" : state.goals.mode === "gain" ? "Superávit" : "Mantenimiento"} planificado</span><span>${fmt(Math.abs(state.goals.maintenance - state.goals.kcal))} kcal</span></div></article>`;
+    energy = dailyEnergy(state, selectedDate),
+    remaining = energy.target - t.kcal;
+  return `<article class="card"><div class="card-title"><h2 class="label-icon">${icon("fire")} Energía del día</h2><span class="tag">kcal</span></div><div class="calorie-body"><div class="ring" style="--value:${Math.min(100, (t.kcal / energy.target) * 100)}"><div class="ring-inner"><strong>${fmt(t.kcal)}</strong><small>kcal consumidas</small></div></div><div class="calorie-side"><div><div class="micro-label">Objetivo de hoy</div><strong>${fmt(energy.target)}<small>kcal</small></strong></div><div><div class="micro-label">${remaining >= 0 ? "Te quedan" : "Sobre el objetivo"}</div><strong>${fmt(Math.abs(remaining))}<small>kcal</small></strong></div></div></div><div class="energy-breakdown"><span>Base <b>${fmt(energy.base)}</b></span><span>+ Cardio <b>${fmt(energy.cardio)}</b></span><button type="button" class="energy-cardio-add" data-action="new-cardio" aria-label="Registrar cardio">${icon("plus")} Cardio</button></div><div class="card-foot"><span>${icon("target")} ${state.goals.mode === "lose" ? "Déficit" : state.goals.mode === "gain" ? "Superávit" : "Mantenimiento"} del plan base</span><span>${fmt(Math.abs(state.goals.maintenance - state.goals.kcal))} kcal</span></div></article>`;
 }
 function macrosCard() {
   const t = mealTotals(datedEntries());
@@ -426,9 +429,9 @@ function homePage() {
   const w = weightStats(state.weights, selectedDate),
     stats = currentTrainingStats();
   const sessionDays = new Set(
-    state.sessions
+    [...state.sessions
       .filter((s) => s.finished && s.date <= selectedDate)
-      .map((s) => s.date),
+      .map((s) => s.date), ...(state.cardio || []).filter((r) => r.date <= selectedDate).map((r) => r.date)],
   );
   const greeting =
     selectedDate === today()
@@ -487,16 +490,17 @@ function metrics() {
 }
 function periodControl() {
   const stats = currentTrainingStats();
-  return `<section class="period-control" aria-label="Periodo de entrenamiento"><div><strong>Tu volumen, con perspectiva</strong><p>${dateLabel(stats.start, { day: "numeric", month: "short", year: "numeric" })} — ${dateLabel(stats.end, { day: "numeric", month: "short", year: "numeric" })} · hasta la fecha del diario</p></div><div class="tabs no-margin" role="group" aria-label="Elegir periodo"><button class="tab ${trainingMode() === "rolling" ? "active" : ""}" data-training-window="rolling" aria-pressed="${trainingMode() === "rolling"}">Últimos 7 días</button><button class="tab ${trainingMode() === "week" ? "active" : ""}" data-training-window="week" aria-pressed="${trainingMode() === "week"}">Semana calendario</button></div></section>`;
+  return `<section class="period-control" aria-label="Periodo de entrenamiento"><div><strong>${tab === "cardio" ? "Tu cardio, con perspectiva" : "Tu volumen, con perspectiva"}</strong><p>${dateLabel(stats.start, { day: "numeric", month: "short", year: "numeric" })} — ${dateLabel(stats.end, { day: "numeric", month: "short", year: "numeric" })} · hasta la fecha del diario</p></div><div class="tabs no-margin" role="group" aria-label="Elegir periodo"><button class="tab ${trainingMode() === "rolling" ? "active" : ""}" data-training-window="rolling" aria-pressed="${trainingMode() === "rolling"}">Últimos 7 días</button><button class="tab ${trainingMode() === "week" ? "active" : ""}" data-training-window="week" aria-pressed="${trainingMode() === "week"}">Semana calendario</button></div></section>`;
 }
 function muscleOverview() {
   return `<div class="grid-2 muscle-overview">${muscleVolumeCard()}<div><article class="card"><div class="section-heading"><div><h2>Distintos ejercicios. El mismo músculo.</h2><p>Un registro que conecta toda tu semana.</p></div>${icon("target")}</div><div class="example-timeline"><div><span>LUN</span><strong>Press de banca</strong><small>3 series de ejemplo</small></div><div><span>MIÉ</span><strong>Press de pecho en máquina</strong><small>3 series de ejemplo</small></div><div><span>DOM</span><strong>Flexiones (push ups)</strong><small>3 series de ejemplo</small></div></div><div class="info-box no-margin">En este ejemplo: <strong>pecho, 9 directas</strong>; <strong>deltoides y tríceps, 9 indirectas cada uno</strong>. El conteo se actualiza al completar tus series.</div><p class="help-text spacer-top">Los últimos 7 días incluyen la fecha elegida y los 6 días anteriores. Al avanzar la fecha, las series más antiguas salen automáticamente del periodo.</p></article><article class="card spacer-top"><h3>${exercises.length} ejercicios, muchas formas de entrenar</h3><p class="help-text spacer-top">Barra, mancuernas, poleas, máquinas y peso corporal. Los ejercicios personalizados también participan en el conteo.</p><p class="help-text spacer-top">Las series directas e indirectas se registran por separado. El total de participación cuenta una serie por cada músculo asignado; no expresa una equivalencia de estímulo entre ejercicios.</p><p class="source-note">Puedes adaptar los músculos de cada ejercicio a su variante con el botón ${icon("target").replace('class="icon', 'style="display:inline;width:12px;height:12px" class="icon')} de la sesión. <a href="https://www.acefitness.org/resources/everyone/exercise-library/" target="_blank" rel="noopener">Biblioteca de referencia de movimientos: ACE</a>.</p>${button("Crear sesión", "new-session", "plus", "full spacer-top")}</article></div></div>`;
 }
 function trainingPage() {
   const session = getSession();
-  return `${heading("Haz que cada serie cuente.", "Tu esfuerzo de hoy, tu progreso de mañana.", button("Nueva sesión", "new-session", "plus"), "ENTRENAMIENTO")}${periodControl()}${metrics()}<div class="tabs" role="tablist" aria-label="Entrenamiento">${[
+  return `${heading("Fuerza y cardio.", "Tus series, tus minutos y tu progreso.", tab === "cardio" ? button("Registrar cardio", "new-cardio", "clock") : button("Nueva sesión", "new-session", "plus"), "ENTRENAMIENTO")}${periodControl()}${tab === "cardio" ? "" : metrics()}<div class="tabs" role="tablist" aria-label="Entrenamiento">${[
     ["volume", "Volumen por músculo"],
     ["session", "Mi sesión"],
+    ["cardio", "Cardio"],
     ["routines", "Rutinas"],
     ["history", "Historial"],
   ]
@@ -505,7 +509,9 @@ function trainingPage() {
         `<button class="tab ${tab === id ? "active" : ""}" data-training-tab="${id}" role="tab" aria-selected="${tab === id}">${label}</button>`,
     )
     .join("")}</div>${
-    tab === "volume"
+    tab === "cardio"
+      ? cardioPage()
+      : tab === "volume"
       ? muscleOverview()
       : tab === "session"
         ? `<div class="grid-2 workout-grid"><article class="card">${session ? sessionEditor(session) : empty("Tu próxima sesión empieza aquí.", "Elige una rutina o crea una sesión con tus ejercicios.", "new-session", "Crear sesión", "dumbbell")}</article><div>${muscleVolumeCard()}<article class="card spacer-top"><h3>Entrena con contexto</h3><p class="help-text" style="margin-top:13px">El RIR registra cuántas repeticiones crees que podrías haber hecho al terminar una serie. 0 = ninguna más. Si lo dejas vacío, se cuenta como 0 (al fallo).</p><p class="help-text" style="margin-top:10px">Toca Carga, Reps o RIR para abrir la rueda y desliza hasta el valor. Una serie queda hecha al elegir las repeticiones. El volumen suma carga × repeticiones de las series registradas. En ejercicios con peso corporal registra solo la carga añadida.</p><p class="help-text" style="margin-top:10px">Cada ejercicio puede sumar series directas e indirectas a distintos músculos. Puedes editar esa distribución con el botón de músculos de cada ejercicio.</p></article></div></div>`
@@ -514,6 +520,76 @@ function trainingPage() {
           : historyPage()
   }`;
 }
+function cardioPage() {
+  const dates = trainingDays(selectedDate, trainingMode()).filter((d) => d <= selectedDate);
+  const totals = cardioTotals(state.cardio, dates);
+  const records = (state.cardio || []).filter((r) => dates.includes(r.date))
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const energy = dailyEnergy(state, selectedDate);
+  const rows = (list) => list.map((r) => {
+    const activity = cardioActivity(r.activityId);
+    return `<article class="cardio-entry"><div class="cardio-entry-icon">${icon("clock")}</div><div class="cardio-entry-info"><h3>${esc(activity.name)}</h3><p>${esc(activity.label)}</p><span>${fmt(r.minutes, r.minutes % 1 ? 1 : 0)} min · ${r.source === "estimate" ? `Estimación · ${fmt(r.weightKg, 1)} kg` : "Kcal activas introducidas"}</span>${r.notes ? `<p>${esc(r.notes)}</p>` : ""}</div><div class="cardio-entry-energy"><strong>${fmt(r.kcal)}</strong><small>kcal activas</small><div>${iconButton("edit", "edit-cardio", "Editar " + activity.name, `data-id="${r.id}"`)}${iconButton("trash", "delete-cardio", "Eliminar " + activity.name, `data-id="${r.id}"`)}</div></div></article>`;
+  }).join("");
+  const earlier = [...new Set(records.filter((r) => r.date !== selectedDate).map((r) => r.date))];
+  return `<section class="card cardio-summary"><div class="section-heading"><div><h2>Tiempo para moverte</h2><p>${periodLabel()} · hasta la fecha del diario</p></div>${icon("clock")}</div><div class="cardio-stats"><div><strong>${fmt(totals.minutes, totals.minutes % 1 ? 1 : 0)}</strong><span>minutos</span></div><div><strong>${fmt(totals.kcal)}</strong><span>kcal activas</span></div><div><strong>${totals.count}</strong><span>${totals.count === 1 ? "registro" : "registros"}</span></div></div><p class="help-text">El cardio se registra por tiempo; tus series y volumen de fuerza se cuentan por separado.</p></section><div class="grid-2 spacer-top"><article class="card"><div class="section-heading"><div><h2>Cardio del día</h2><p>${dateLabel(selectedDate, { day: "numeric", month: "long" })}</p></div>${iconButton("plus", "new-cardio", "Registrar cardio")}</div>${rows(records.filter((r) => r.date === selectedDate)) || `<p class="help-text spacer-top">Aún no hay cardio registrado en esta fecha.</p>${button("Registrar cardio", "new-cardio", "plus", "full spacer-top")}`}${earlier.length ? `<details class="cardio-history"><summary>Otros días del periodo</summary>${earlier.map((d) => `<h3 class="cardio-date">${dateLabel(d, { weekday: "long", day: "numeric", month: "short" })}</h3>${rows(records.filter((r) => r.date === d))}`).join("")}</details>` : ""}</article><article class="card cardio-budget"><h2>También cuenta en tu alimentación</h2><p class="help-text spacer-top">Las kcal activas registradas se añaden siempre al objetivo de ese día.</p><dl><div><dt>Objetivo base</dt><dd>${fmt(energy.base)} kcal</dd></div><div><dt>+ Cardio del día</dt><dd>${fmt(energy.cardio)} kcal</dd></div><div class="cardio-budget-total"><dt>Objetivo de hoy</dt><dd>${fmt(energy.target)} kcal</dd></div></dl><p class="help-text">Los macros conservan tus metas configuradas. Si tu mantenimiento ya incluye este cardio, el ajuste puede contarlo dos veces; puedes revisar tu objetivo base.</p>${button("Ver alimentación", "cardio-nutrition", "arrow", "full spacer-top")}<details class="cardio-method"><summary>Cómo se estiman las kcal</summary><p>Se usan la actividad, el tiempo y el peso que confirmas al registrar. Se descuenta el gasto en reposo de ese tiempo: son kcal activas aproximadas, no una medición individual.</p><p>Referencia para adultos de 19 a 59 años. Para otras actividades, intensidades o edades, introduce las kcal activas de tu dispositivo.</p><a href="https://pacompendium.com/" target="_blank" rel="noopener">Compendio de Actividades Físicas 2024</a></details></article></div>`;
+}
+
+function cardioModal(entry) {
+  const activity = cardioActivity(entry?.activityId || "walk-moderate");
+  const date = entry?.date || selectedDate;
+  const canEstimate = state.profile?.age >= 19 && state.profile.age <= 59;
+  const weight = entry?.weightKg ?? cardioWeightForDate(state, date);
+  openModal(entry ? "Editar cardio" : "Registrar cardio", "Tus minutos también forman parte del diario.", `<form id="cardio-form" class="cardio-modal"><div class="form-grid"><div class="field wide"><label for="cardio-activity">Actividad</label><select id="cardio-activity">${cardioActivities.map((a) => `<option value="${a.id}" ${a.id === activity.groupId ? "selected" : ""}>${a.name}</option>`).join("")}</select></div><div class="field wide"><label for="cardio-effort">Ritmo o intensidad</label><select id="cardio-effort" name="activityId"></select></div><div class="field"><label for="cardio-date">Fecha</label><input id="cardio-date" name="date" type="date" required max="${today()}" value="${date}"></div><div class="field"><label for="cardio-minutes">Duración · min</label><input id="cardio-minutes" name="minutes" type="number" inputmode="decimal" required min="0.1" max="1440" step="0.1" value="${entry?.minutes ?? 30}"></div><div class="field wide"><label for="cardio-source">Calorías activas</label><select id="cardio-source" name="source"><option value="estimate" ${!canEstimate ? "disabled" : ""}>Estimar con duración y peso</option><option value="manual">Introducir kcal de reloj o máquina</option></select></div><div id="cardio-weight-field" class="field wide"><label for="cardio-weight">Peso para este registro · kg</label><input id="cardio-weight" name="weightKg" type="number" inputmode="decimal" required min="30" max="300" step="0.1" value="${weight == null ? "" : Math.round(weight * 10) / 10}"><small>Confirma tu peso en esa fecha. Se conserva con el registro.</small></div><div id="cardio-kcal-field" class="field wide"><label for="cardio-kcal">Kcal activas del dispositivo</label><input id="cardio-kcal" name="kcal" type="number" inputmode="numeric" required min="0" max="20000" step="1" value="${entry?.kcal ?? ""}"><small>Usa calorías activas, sin incluir las calorías en reposo.</small></div><div class="field wide"><label for="cardio-notes">Nota · opcional</label><input id="cardio-notes" name="notes" maxlength="1000" placeholder="Ruta, distancia, sensaciones…" value="${esc(entry?.notes || "")}"></div></div><div class="cardio-preview" aria-live="polite" aria-atomic="true"><output id="cardio-preview"></output><small>Se suman al objetivo de alimentación de esta fecha.</small></div><button type="submit" class="btn primary full">${icon("check")}Guardar cardio</button><p id="cardio-estimate-note" class="source-note">Estimación orientativa de kcal activas para adultos de 19 a 59 años. <a href="https://pacompendium.com/" target="_blank" rel="noopener">Compendio 2024</a>. No usar durante embarazo o lactancia.</p>${!canEstimate ? '<p class="help-text spacer-top">La estimación requiere un perfil de 19 a 59 años. Puedes registrar las kcal activas de tu dispositivo.</p>' : ""}</form>`);
+  const form = $("#cardio-form");
+  const source = $("#cardio-source");
+  const effort = $("#cardio-effort");
+  source.value = canEstimate ? (entry?.source || "estimate") : "manual";
+  function options(id) {
+    const group = cardioActivities.find((a) => a.id === $("#cardio-activity").value);
+    effort.innerHTML = group.options.map((o) => `<option value="${o.id}">${esc(o.label)}</option>`).join("");
+    if (id) effort.value = id;
+    source.options[0].disabled = !canEstimate || group.id === "other";
+    if (source.options[0].disabled) source.value = "manual";
+  }
+  function preview() {
+    const estimated = source.value === "estimate";
+    $("#cardio-weight-field").hidden = !estimated;
+    $("#cardio-weight").disabled = !estimated;
+    $("#cardio-kcal-field").hidden = estimated;
+    $("#cardio-kcal").disabled = estimated;
+    $("#cardio-estimate-note").hidden = !estimated;
+    const kcal = estimated ? estimateCardioKcal(effort.value, +$("#cardio-minutes").value, +$("#cardio-weight").value) : ($("#cardio-kcal").value === "" ? null : +$("#cardio-kcal").value);
+    $("#cardio-preview").textContent = kcal == null || !Number.isFinite(kcal) || kcal < 0 || kcal > 20000 ? "Completa los datos para ver las kcal" : `+ ${fmt(kcal)} kcal activas${estimated ? " estimadas" : ""}`;
+  }
+  options(activity.id);
+  preview();
+  $("#cardio-activity").addEventListener("change", () => { options(); preview(); });
+  $("#cardio-date").addEventListener("change", () => {
+    const datedWeight = cardioWeightForDate(state, $("#cardio-date").value);
+    $("#cardio-weight").value = datedWeight == null ? "" : Math.round(datedWeight * 10) / 10;
+    preview();
+  });
+  form.addEventListener("input", preview);
+  form.addEventListener("change", preview);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!form.reportValidity()) return;
+    const data = Object.fromEntries(new FormData(form));
+    const record = { id: entry?.id || uid(), date: data.date, activityId: data.activityId, minutes: +data.minutes,
+      source: data.source, weightKg: data.source === "estimate" ? +data.weightKg : null,
+      kcal: data.source === "estimate" ? estimateCardioKcal(data.activityId, +data.minutes, +data.weightKg) : +data.kcal,
+      notes: data.notes.trim() };
+    if (!validCardioRecord(record) || record.date > today()) { toast("Revisa los datos del cardio."); return; }
+    state.cardio ||= [];
+    if (entry) state.cardio[state.cardio.findIndex((r) => r.id === entry.id)] = record;
+    else state.cardio.push(record);
+    selectedDate = record.date;
+    currentSessionId = null;
+    closeModal();
+    save("Cardio guardado. Objetivo de alimentación actualizado.");
+  });
+}
+
 function sessionEditor(s) {
   return `<div class="workout-header">
     <div>
@@ -702,9 +778,8 @@ function commitSetPicker() {
   if (!set) return closeModal();
   if (picker.field === "kg") {
     set.unit = picker.unit;
-    set.kg = picker.dirtyValue
-      ? picker.unit === "lb" ? lbToKg(picker.kg) : picker.kg
-      : picker.originalKg;
+    // The wheel already normalizes its selection to kg, including lb input.
+    set.kg = picker.dirtyValue ? picker.kg : picker.originalKg;
   } else {
     if (picker.field === "reps") {
       recordSetReps(state, picker.sessionId, picker.exerciseIndex, picker.setIndex, picker.value);
@@ -956,7 +1031,7 @@ function goalsForm(onboarding = false) {
     )
     .join(
       "",
-    )}</select></div><div class="field"><label for="goal-calories">Objetivo diario · kcal</label><input id="goal-calories" name="kcal" type="number" min="1" max="10000" step="1" required value="${g.kcal}"></div><div class="field"><label for="goal-maintenance">Mantenimiento estimado · kcal</label><input id="goal-maintenance" name="maintenance" type="number" min="1" max="10000" step="1" required value="${g.maintenance}"><small>Introduce el gasto diario estimado de tu plan.</small></div><div class="field"><label for="goal-protein">Proteínas · g al día</label><input id="goal-protein" name="protein" type="number" min="0" max="1000" step="1" required value="${g.protein}"></div><div class="field"><label for="goal-carbs">Carbohidratos · g al día</label><input id="goal-carbs" name="carbs" type="number" min="0" max="1000" step="1" required value="${g.carbs}"></div><div class="field"><label for="goal-fat">Grasas · g al día</label><input id="goal-fat" name="fat" type="number" min="0" max="1000" step="1" required value="${g.fat}"></div><div class="field"><label for="goal-weight">Peso objetivo · kg</label><input id="goal-weight" name="weight" type="number" min="1" max="500" step="0.1" required value="${g.weight}"></div><div class="field"><label for="goal-sessions">Entrenamientos por semana</label><input id="goal-sessions" name="sessions" type="number" min="1" max="14" step="1" required value="${g.sessions}"></div><div class="field"><label>Balance planificado</label><div id="goal-balance" class="info-box no-margin">${goalBalance(g)}</div></div><div class="field wide"><small>Las metas de macros equivalen aproximadamente a <span id="macro-kcal">${fmt(g.protein * 4 + g.carbs * 4 + g.fat * 9)}</span> kcal. Puedes ajustarlas de forma independiente al objetivo calórico.</small></div></div><div class="settings-actions"><button type="submit" class="btn primary">${icon("check")}${onboarding ? "Empezar mi diario" : "Guardar objetivos"}</button>${onboarding ? '<button type="button" class="btn" data-action="close">Seguir explorando</button>' : ""}</div><p class="help-text spacer-top">El balance planificado es la diferencia entre tu objetivo de calorías y el mantenimiento estimado que introduces. No se suman calorías del entrenamiento para evitar contarlas dos veces.</p></form>`;
+    )}</select></div><div class="field"><label for="goal-calories">Objetivo base diario · kcal</label><input id="goal-calories" name="kcal" type="number" min="1" max="10000" step="1" required value="${g.kcal}"></div><div class="field"><label for="goal-maintenance">Mantenimiento estimado · kcal</label><input id="goal-maintenance" name="maintenance" type="number" min="1" max="10000" step="1" required value="${g.maintenance}"><small>Introduce el gasto diario estimado de tu plan.</small></div><div class="field"><label for="goal-protein">Proteínas · g al día</label><input id="goal-protein" name="protein" type="number" min="0" max="1000" step="1" required value="${g.protein}"></div><div class="field"><label for="goal-carbs">Carbohidratos · g al día</label><input id="goal-carbs" name="carbs" type="number" min="0" max="1000" step="1" required value="${g.carbs}"></div><div class="field"><label for="goal-fat">Grasas · g al día</label><input id="goal-fat" name="fat" type="number" min="0" max="1000" step="1" required value="${g.fat}"></div><div class="field"><label for="goal-weight">Peso objetivo · kg</label><input id="goal-weight" name="weight" type="number" min="1" max="500" step="0.1" required value="${g.weight}"></div><div class="field"><label for="goal-sessions">Entrenamientos por semana</label><input id="goal-sessions" name="sessions" type="number" min="1" max="14" step="1" required value="${g.sessions}"></div><div class="field"><label>Balance planificado</label><div id="goal-balance" class="info-box no-margin">${goalBalance(g)}</div></div><div class="field wide"><small>Las metas de macros equivalen aproximadamente a <span id="macro-kcal">${fmt(g.protein * 4 + g.carbs * 4 + g.fat * 9)}</span> kcal. Puedes ajustarlas de forma independiente al objetivo calórico.</small></div></div><div class="settings-actions"><button type="submit" class="btn primary">${icon("check")}${onboarding ? "Empezar mi diario" : "Guardar objetivos"}</button>${onboarding ? '<button type="button" class="btn" data-action="close">Seguir explorando</button>' : ""}</div><p class="help-text spacer-top">El balance planificado es la diferencia entre tu objetivo de calorías y el mantenimiento estimado que introduces. Las kcal activas del cardio registrado se suman siempre al objetivo de alimentación de esa fecha. Si tu mantenimiento ya incluye ese cardio, revisa tu base para evitar contarlo dos veces. Los macros no cambian automáticamente.</p></form>`;
 }
 function onboardingForm() {
   return `<form id="onboarding-form">
@@ -1755,7 +1830,7 @@ async function importFile(e) {
     if (!validState(data)) throw Error("invalid");
     confirmModal(
       "Importar tu copia de seguridad",
-      `La copia contiene ${data.entries.length} alimentos registrados, ${data.sessions.length} sesiones y ${data.weights.length} registros de peso. Sustituirá tus datos actuales. Exporta una copia antes si quieres conservarlos.`,
+      `La copia contiene ${data.entries.length} alimentos registrados, ${data.sessions.length} sesiones de fuerza, ${data.cardio?.length || 0} registros de cardio y ${data.weights.length} registros de peso. Sustituirá tus datos actuales. Exporta una copia antes si quieres conservarlos.`,
       () => {
         state = data;
         currentSessionId = null;
@@ -1838,6 +1913,25 @@ document.addEventListener("click", (e) => {
   if (!b) return;
   const d = b.dataset;
   switch (d.action) {
+    case "new-cardio":
+      cardioModal();
+      break;
+    case "edit-cardio": {
+      const entry = (state.cardio || []).find((r) => r.id === d.id);
+      if (entry) cardioModal(entry);
+      break;
+    }
+    case "delete-cardio":
+      confirmModal("Eliminar cardio", "Se eliminará este registro y se restarán sus kcal del objetivo de alimentación de esa fecha.", () => {
+        state.cardio = state.cardio.filter((r) => r.id !== d.id);
+        save("Cardio eliminado. Objetivo de alimentación actualizado.");
+      }, "Eliminar cardio");
+      break;
+    case "cardio-nutrition":
+      view = "nutrition";
+      render();
+      window.scrollTo({ top: 0, behavior: "instant" });
+      break;
     case "stop-rest-timer":
       state.restTimer = null;
       save();

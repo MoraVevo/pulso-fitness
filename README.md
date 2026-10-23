@@ -25,6 +25,7 @@ npm run check
 - Ilustraciones SVG originales por movimiento, con 20 dibujos individuales de jale: figuras humanas con volumen, posturas, agarres y equipos diferenciados en el selector, las rutinas y las sesiones.
 - Cuatro plantillas y rutinas propias guardadas: crear, editar, ordenar ejercicios, definir series/repeticiones/RIR y reutilizar. También se puede guardar una sesión como rutina; cada sesión nueva reinicia las casillas de series completadas.
 - Series, carga, repeticiones, RIR, sensación, historial y progreso por ejercicio.
+- Cardio por actividad, ritmo y minutos: caminata, caminadora, trote/carrera, bicicleta, bicicleta estática, elíptica, remo, escaladora, cuerda y otros. Registro, edición e historial desde el celular; kcal activas estimadas o introducidas desde un reloj o máquina.
 - Series directas e indirectas por músculo, con desglose de los ejercicios que contribuyen. Un mismo ejercicio puede tener varios músculos directos y secundarios, editables en cada sesión.
 - Ventanas de **últimos 7 días móviles** (fecha del diario y los 6 días anteriores) y **semana calendario** (lunes hasta la fecha del diario). No se incluyen registros posteriores a la fecha elegida.
 - Volumen con carga calculado como kg × repeticiones de las series completadas. Las series globales se cuentan una sola vez, aunque participen en varios músculos.
@@ -55,6 +56,14 @@ El botón de músculos de cada ejercicio permite ajustar el detalle en esa sesi�
 
 ## Datos y límites
 
+El apartado **Entrenamiento → Cardio** muestra minutos, kcal activas y registros del periodo elegido. También se puede registrar desde la tarjeta de energía en Resumen o Alimentación. Todo el cardio guardado aumenta siempre el objetivo alimentario de su propia fecha: **objetivo base + kcal activas de cardio**. La comida consumida, los objetivos de macros y las series de fuerza conservan sus valores. Editar, mover de fecha o eliminar un cardio actualiza los totales correspondientes. Los días con cardio también cuentan como días de movimiento.
+
+Las estimaciones usan los MET del [Compendio de Actividades Físicas 2024](https://pacompendium.com/), con referencias específicas de [caminata y caminadora](https://pacompendium.com/walking/), [carrera](https://pacompendium.com/running/), [bicicleta](https://pacompendium.com/bicycling/) y [aparatos y cuerda](https://pacompendium.com/conditioning-exercise/). Como 1 MET equivale aproximadamente a 1 kcal/kg/hora, se estiman kcal **activas** mediante `(MET − 1) × peso en kg × minutos / 60`, redondeadas al entero. Se descuenta el reposo de ese tiempo; no es una medición individual. La estimación está disponible con un perfil de 19 a 59 años; otras edades, actividades o intensidades pueden usar kcal activas introducidas. No usar la estimación durante embarazo o lactancia. Confirma que tu dispositivo informa calorías activas y no gasto total.
+
+El peso sugerido usa el último pesaje hasta la fecha del cardio, o el peso del perfil si no hay pesajes anteriores; nunca usa el peso objetivo. El peso confirmado y las kcal se conservan en el registro, de modo que nuevos pesajes no recalculan el historial. El campo opcional `cardio` se incluye en las copias JSON con validación; las copias anteriores que no lo contienen siguen funcionando. Los IDs de intensidad conservan sus MET para mantener la interpretación de los registros históricos.
+
+El mantenimiento inicial ya utiliza un factor de actividad. Sumar cardio que ya estuviera incluido en ese factor puede contarlo dos veces, incluso al usar kcal activas. La interfaz muestra la base y el aporte de cardio por separado y permite revisar la base en Mis objetivos; no la modifica automáticamente. El déficit o superávit indicado sigue siendo el del plan base, no un balance energético medido.
+
 El cronómetro de descanso comienza al confirmar las repeticiones de una serie nueva en una sesión en curso. Se muestra en una barra compacta, situada encima de la navegación inferior en celular, con el ejercicio y el número de serie. Tocar el nombre vuelve a esa serie; el botón de cierre detiene el cronómetro. Una nueva serie lo reinicia y finalizar la sesión lo detiene. Corregir reps, carga o RIR de una serie ya registrada no cambia su inicio. Las series antiguas y las sesiones finalizadas no reciben una hora ficticia al editarse.
 
 La hora de registro se conserva en `recordedAt` de la serie y la referencia activa en el campo opcional `restTimer`. El tiempo se calcula desde esa hora, por lo que se recupera al cambiar de app, recargar o volver a abrir Pulso en el mismo navegador y origen, mientras se conserven sus datos. La actualización visual se suspende cuando la página está oculta. No incluye alarma ni notificación en segundo plano; depende del reloj del dispositivo. Las copias anteriores siguen siendo compatibles y las series copiadas a una rutina o sesión nueva comienzan sin hora de registro.
@@ -77,6 +86,7 @@ Las medias nutricionales omiten días sin registros y pueden incluir días incom
 
 - `dist/`: aplicación publicable, sin compilación.
 - `dist/core.js`: cálculos puros y validación de copias.
+- `dist/cardio.js`: catálogo con MET de referencia, kcal activas, peso por fecha y objetivo diario con cardio.
 - `dist/app.js`: interfaz, persistencia y flujos de registro.
 - `dist/exercise-visuals.js`: clasificación de patrones y dibujos SVG por movimiento.
 - `dist/pull-illustrations.js`: ilustraciones vectoriales de los 20 ejercicios de jale.
