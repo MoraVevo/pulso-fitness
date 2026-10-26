@@ -132,7 +132,7 @@ let foods = [];
 let state;
 let view = "home";
 let selectedDate = today();
-let tab = "volume";
+let tab = "session";
 let progressTab = "weight";
 let currentSessionId = null;
 let foodFilter = "Todos";
@@ -354,11 +354,76 @@ function render() {
       .map(navItem)
       .join(
         "",
-      )}</nav><div class="sidebar-bottom"><div class="side-note">${icon("leaf")}<strong>El progreso está en lo simple.</strong><p>Un registro a la vez. Construye hábitos que se queden contigo.</p><button class="text-btn" data-action="export">Guardar una copia ${icon("download")}</button></div><div class="profile"><div class="avatar">${esc((state.goals.name || "Tú").slice(0, 2).toUpperCase())}</div><div><strong>${esc(state.goals.name || "Tu espacio")}</strong><small>${state.demo ? "Vista de ejemplo" : "Mi diario personal"}</small></div>${iconButton("settings", "settings", "Configurar objetivos")}</div></div></aside><main class="main"><header class="topbar"><div class="mobile-brand"><img src="icon.svg" alt="">pulso.</div><div class="breadcrumb">Mi espacio <span>/</span> <strong>${pageNames[view]}</strong></div><div class="top-actions"><span class="status-chip"><i></i>${storageFailed ? "Guardado no disponible" : "Guardado en este dispositivo"}</span><div class="date-control">${icon("calendar")}<input id="selected-date" type="date" value="${selectedDate}" max="${today()}" aria-label="Fecha del diario"></div>${iconButton("download", "export", "Exportar copia de seguridad")}</div></header>${state.demo ? `<div class="demo-banner"><span>${icon("spark")} Estás explorando con datos de ejemplo.</span><button class="text-btn" data-action="start">Empezar mis registros ${icon("arrow")}</button></div>` : ""}${storageFailed ? '<div class="info-box">El almacenamiento no está disponible. Exporta una copia antes de cerrar.</div>' : ""}<div id="page">${{ home: homePage, nutrition: nutritionPage, training: trainingPage, progress: progressPage, library: libraryPage, goals: goalsPage }[view]()}</div><footer class="footer"><span>${icon("heart")} Hecho para avanzar a tu ritmo.</span><span>${icon("lock")} Tus registros se guardan en este navegador.</span></footer></main><nav class="mobile-nav" aria-label="Navegación móvil">${[...nav, ["library", "book", "Biblioteca"], ["goals", "target", "Objetivos"]].map(([id, ico, label]) => `<button class="${view === id ? "active" : ""}" data-nav="${id}">${icon(ico)}${label}</button>`).join("")}</nav>`;
+      )}</nav><div class="sidebar-bottom"><div class="side-note">${icon("leaf")}<strong>El progreso está en lo simple.</strong><p>Un registro a la vez. Construye hábitos que se queden contigo.</p><button class="text-btn" data-action="export">Guardar una copia ${icon("download")}</button></div><div class="profile"><div class="avatar">${esc((state.goals.name || "Tú").slice(0, 2).toUpperCase())}</div><div><strong>${esc(state.goals.name || "Tu espacio")}</strong><small>${state.demo ? "Vista de ejemplo" : "Mi diario personal"}</small></div>${iconButton("settings", "settings", "Configurar objetivos")}</div></div></aside><main class="main"><header class="topbar"><div class="mobile-brand"><img src="icon.svg" alt="">pulso.</div><div class="breadcrumb">Mi espacio <span>/</span> <strong>${pageNames[view]}</strong></div><div class="top-actions"><span class="status-chip"><i></i>${storageFailed ? "Guardado no disponible" : "Guardado en este dispositivo"}</span><div class="date-control">${icon("calendar")}<input id="selected-date" type="date" value="${selectedDate}" max="${today()}" aria-label="Fecha del diario"></div>${iconButton("download", "export", "Exportar copia de seguridad")}</div></header>${state.demo ? `<div class="demo-banner"><span>${icon("spark")} Estás explorando con datos de ejemplo.</span><button class="text-btn" data-action="start">Empezar mis registros ${icon("arrow")}</button></div>` : ""}${storageFailed ? '<div class="info-box">El almacenamiento no está disponible. Exporta una copia antes de cerrar.</div>' : ""}<div id="page">${{ home: homePage, nutrition: nutritionPage, training: trainingPage, progress: progressPage, library: libraryPage, goals: goalsPage }[view]()}</div><footer class="footer"><span>${icon("heart")} Hecho para avanzar a tu ritmo.</span><span>${icon("lock")} Tus registros se guardan en este navegador.</span></footer></main><nav class="mobile-nav" aria-label="Navegación móvil"><span class="nav-pill" aria-hidden="true"></span>${[
+        ["home", "home", "Hoy"],
+        ["nutrition", "food", "Comida"],
+        ["training", "dumbbell", "Entreno"],
+        ["progress", "chart", "Progreso"],
+        ["library", "book", "Biblioteca"],
+        ["goals", "target", "Objetivos"],
+      ]
+        .map(
+          ([id, ico, label]) =>
+            `<button class="${view === id ? "active" : ""}" data-nav="${id}" aria-label="${label}"${view === id ? ' aria-current="page"' : ""}>${icon(ico)}<span class="nav-txt">${label}</span></button>`,
+        )
+        .join("")}</nav>`;
   bindPage();
   $("#app").insertAdjacentHTML("beforeend", '<div id="rest-timer-slot"></div>');
   syncRestTimer();
+  positionMobileNavPill();
 }
+
+// La píldora activa viaja entre pestañas aunque el nav se regenere en cada render.
+let lastPillPos = null;
+let lastPillEl = null;
+function positionMobileNavPill() {
+  const nav = document.querySelector(".mobile-nav");
+  const active = nav && nav.querySelector("button.active");
+  const pill = nav && nav.querySelector(".nav-pill");
+  if (!nav || !active || !pill || !nav.offsetWidth) return;
+  const nb = nav.getBoundingClientRect();
+  const ab = active.getBoundingClientRect();
+  // La píldora es absoluta respecto al padding box del nav (dentro del borde).
+  const next = { x: ab.left - nb.left - nav.clientLeft, w: ab.width };
+  const moved = lastPillPos && (lastPillPos.x !== next.x || lastPillPos.w !== next.w);
+  const travel = lastPillPos && Math.abs(lastPillPos.x - next.x) > 12;
+  const fresh = pill !== lastPillEl;
+  lastPillEl = pill;
+  if (moved) {
+    // Viaja desde la posición anterior de la pestaña previa.
+    pill.style.transition = "none";
+    pill.style.transform = `translateX(${lastPillPos.x}px)`;
+    pill.style.width = `${lastPillPos.w}px`;
+    pill.getBoundingClientRect();
+    pill.style.transition = "";
+    const txt = travel && active.querySelector(".nav-txt");
+    if (txt) {
+      // La etiqueta nueva nace visible tras el render; reiniciarla para que
+      // aparezca en fundido mientras la píldora llega.
+      txt.style.transition = "none";
+      txt.style.opacity = "0";
+      txt.style.transform = "translateX(-5px)";
+      txt.getBoundingClientRect();
+      txt.style.transition = "";
+      txt.style.opacity = "";
+      txt.style.transform = "";
+    }
+  } else if (fresh) {
+    // Nodo nuevo en la misma posición: colocar sin animar (la medición de arriba
+    // compromete el transform inicial 0 y animaría un deslizamiento fantasma).
+    pill.style.transition = "none";
+    pill.style.transform = `translateX(${next.x}px)`;
+    pill.style.width = `${next.w}px`;
+    pill.getBoundingClientRect();
+    pill.style.transition = "";
+  }
+  pill.style.transform = `translateX(${next.x}px)`;
+  pill.style.width = `${next.w}px`;
+  lastPillPos = next;
+}
+window.addEventListener("resize", positionMobileNavPill);
+// El ancho de las pestañas cambia al cargar DM Sans; se vuelve a medir la píldora.
+document.fonts?.ready.then(positionMobileNavPill);
 
 let restTimerTick = null;
 function syncRestTimer() {
@@ -497,18 +562,19 @@ function muscleOverview() {
 }
 function trainingPage() {
   const session = getSession();
-  return `${heading("Fuerza y cardio.", "Tus series, tus minutos y tu progreso.", tab === "cardio" ? button("Registrar cardio", "new-cardio", "clock") : button("Nueva sesión", "new-session", "plus"), "ENTRENAMIENTO")}${periodControl()}${tab === "cardio" ? "" : metrics()}<div class="tabs" role="tablist" aria-label="Entrenamiento">${[
-    ["volume", "Volumen por músculo"],
-    ["session", "Mi sesión"],
+  const liveToday = state.sessions.some((s) => s.date === selectedDate && !s.finished);
+  return `${heading("Fuerza y cardio.", "Tus series, tus minutos y tu progreso.", tab === "cardio" ? button("Registrar cardio", "new-cardio", "clock") : button("Nueva sesión", "new-session", "plus"), "ENTRENAMIENTO")}<div class="tabs" role="tablist" aria-label="Entrenamiento">${[
+    ["session", "Sesión del día"],
     ["cardio", "Cardio"],
+    ["volume", "Volumen por músculo"],
     ["routines", "Rutinas"],
     ["history", "Historial"],
   ]
     .map(
       ([id, label]) =>
-        `<button class="tab ${tab === id ? "active" : ""}" data-training-tab="${id}" role="tab" aria-selected="${tab === id}">${label}</button>`,
+        `<button class="tab ${tab === id ? "active" : ""}" data-training-tab="${id}" role="tab" aria-selected="${tab === id}">${label}${id === "session" && liveToday ? '<span class="tab-live" aria-hidden="true"></span>' : ""}</button>`,
     )
-    .join("")}</div>${
+    .join("")}</div>${tab === "session" ? "" : periodControl()}${tab === "session" || tab === "cardio" ? "" : metrics()}${
     tab === "cardio"
       ? cardioPage()
       : tab === "volume"

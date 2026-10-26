@@ -1312,6 +1312,16 @@ svg {
   color: var(--green);
   box-shadow: 0 1px 4px #263b3208;
 }
+.tab-live {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 999px;
+  background: var(--green);
+  box-shadow: 0 0 0 3px #315b4626;
+  vertical-align: 1px;
+}
 .search {
   position: relative;
   flex: 1;
@@ -2323,7 +2333,7 @@ dialog:has(.routine-builder) > .modal-header {
   }
   .main {
     margin-left: 0;
-    padding: 0 18px 90px;
+    padding: 0 18px calc(90px + env(safe-area-inset-bottom));
   }
   .topbar {
     height: 73px;
@@ -2553,41 +2563,99 @@ dialog:has(.routine-builder) > .modal-header {
   .mobile-nav {
     display: flex;
     position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 71px;
-    padding: 8px 8px max(8px, env(safe-area-inset-bottom));
-    background: #fcfdf9ed;
-    backdrop-filter: blur(16px);
-    border-top: 1px solid var(--line);
+    left: 50%;
+    bottom: calc(14px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    max-width: calc(100vw - 24px);
+    padding: 6px;
+    border-radius: 999px;
+    background: rgba(252, 253, 249, 0.62);
+    -webkit-backdrop-filter: blur(18px) saturate(1.35);
+    backdrop-filter: blur(18px) saturate(1.35);
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    box-shadow:
+      inset 0 1px 1px rgba(255, 255, 255, 0.7),
+      inset 0 -1px 2px rgba(38, 59, 50, 0.08),
+      0 12px 32px rgba(38, 59, 50, 0.16),
+      0 2px 6px rgba(38, 59, 50, 0.08);
+    overflow: hidden;
     z-index: 25;
-    justify-content: space-around;
+  }
+  .mobile-nav .nav-pill {
+    position: absolute;
+    top: 6px;
+    bottom: 6px;
+    left: 0;
+    width: 46px;
+    transform: translateX(0);
+    border-radius: 999px;
+    background: var(--soft);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 1px 3px rgba(38, 59, 50, 0.12);
+    transition: transform 0.42s cubic-bezier(0.3, 1.2, 0.4, 1),
+      width 0.42s cubic-bezier(0.3, 1.2, 0.4, 1);
+    will-change: transform, width;
   }
   .mobile-nav button {
+    position: relative;
+    z-index: 1;
     border: 0;
     background: none;
     display: flex;
-    flex-direction: column;
     align-items: center;
-    gap: 5px;
-    font-size: 8px;
+    justify-content: center;
+    gap: 6px;
+    height: 46px;
+    min-width: 44px;
+    padding: 0 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
     color: #9ba594;
-    padding: 6px 12px;
-    border-radius: 9px;
-    min-width: 55px;
+    transition: color 0.25s, transform 0.2s;
+  }
+  .mobile-nav button:active {
+    transform: scale(0.9);
+  }
+  .mobile-nav button .nav-txt {
+    display: inline-block;
+    max-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    opacity: 0;
+    transform: translateX(-5px);
+    transition: opacity 0.3s ease 0.18s, transform 0.3s ease 0.18s;
   }
   .mobile-nav button.active {
-    background: #eaf0df;
-    color: #3e5d32;
+    color: var(--green);
+    padding: 0 14px;
+  }
+  .mobile-nav button.active .nav-txt {
+    max-width: 72px;
+    opacity: 1;
+    transform: translateX(0);
   }
   .mobile-nav .icon {
-    width: 19px;
-    height: 19px;
+    width: 20px;
+    height: 20px;
+  }
+  @supports not ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
+    .mobile-nav {
+      background: rgba(252, 253, 249, 0.96);
+    }
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    .mobile-nav {
+      background: rgba(252, 253, 249, 0.96);
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
   }
   .toast {
     left: 50%;
-    bottom: 88px;
+    bottom: calc(86px + env(safe-area-inset-bottom));
   }
   .nutrition-summary {
     grid-template-columns: 1fr;
@@ -3129,8 +3197,10 @@ dialog:has(.routine-builder) > .modal-header {
   grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
 }
 @media (max-width: 360px) {
-  .mobile-nav { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
-  .mobile-nav button { min-width: 0; width: 100%; padding: 6px 1px; font-size: 7px; }
+  .mobile-nav { gap: 0; }
+  .mobile-nav button { min-width: 40px; height: 44px; padding: 0; }
+  .mobile-nav button.active { padding: 0 6px; }
+  .mobile-nav button .nav-txt { display: none; }
 }
 @media (max-width: 1000px) {
   .workout-grid {
