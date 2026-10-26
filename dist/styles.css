@@ -2621,7 +2621,7 @@ dialog:has(.routine-builder) > .modal-header {
   }
   .mobile-nav button .nav-txt {
     display: inline-block;
-    max-width: 0;
+    width: 0;
     overflow: hidden;
     white-space: nowrap;
     opacity: 0;
@@ -2630,12 +2630,21 @@ dialog:has(.routine-builder) > .modal-header {
   }
   .mobile-nav button.active {
     color: var(--green);
-    padding: 0 14px;
+    padding: 0 12px;
   }
+  /* Ranura fija: el ancho de la cápsula no depende de la palabra activa. */
   .mobile-nav button.active .nav-txt {
-    max-width: 72px;
+    width: 54px;
+    text-align: center;
     opacity: 1;
     transform: translateX(0);
+  }
+  /* Esquinas continuas: el canal entre píldora y cápsula se ve de grosor parejo. */
+  @supports (corner-shape: superellipse(2)) {
+    .mobile-nav,
+    .mobile-nav .nav-pill {
+      corner-shape: superellipse(2);
+    }
   }
   .mobile-nav .icon {
     width: 20px;
@@ -3196,6 +3205,10 @@ dialog:has(.routine-builder) > .modal-header {
 .workout-grid {
   grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
 }
+@media (max-width: 371px) {
+  .mobile-nav button { min-width: 40px; }
+  .mobile-nav button.active { padding: 0 10px; }
+}
 @media (max-width: 360px) {
   .mobile-nav { gap: 0; }
   .mobile-nav button { min-width: 40px; height: 44px; padding: 0; }
@@ -3238,5 +3251,63 @@ dialog:has(.routine-builder) > .modal-header {
     margin: 0 auto;
     padding: 22px 20px calc(20px + env(safe-area-inset-bottom));
     border-radius: 22px 22px 0 0;
+  }
+}
+
+/* Apartado por patrón de movimiento (Empuje · Jale · Pierna · Core · Cardio) */
+.pattern-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 4px;
+}
+.pattern-cell {
+  background: var(--bg);
+  border-radius: 14px;
+  padding: 12px 14px;
+}
+.pattern-cell h3 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.pattern-cell .big-number {
+  display: block;
+  margin-top: 6px;
+}
+.pattern-cell span {
+  display: block;
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 1px;
+}
+.pattern-cell small {
+  display: block;
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+/* Cardio como un ejercicio más dentro de la sesión del día */
+.cardio-badge {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--soft);
+  color: var(--green);
+  display: grid;
+  place-items: center;
+}
+.cardio-badge .icon {
+  width: 20px;
+  height: 20px;
+}
+.day-cardio .cardio-entry:first-of-type {
+  margin-top: 4px;
+}
+@media (max-width: 720px) {
+  .pattern-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
