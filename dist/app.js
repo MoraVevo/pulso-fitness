@@ -138,6 +138,7 @@ let selectedDate = today();
 let tab = "session";
 let progressTab = "weight";
 let progressPattern = "pull";
+let progressExercise = null;
 let currentSessionId = null;
 let foodFilter = "Todos";
 let libraryQuery = "";
@@ -1020,11 +1021,11 @@ function progressPage() {
               )
         }</div></article></div>`
       : progressTab === "strength"
-        ? `${periodControl()}${metrics()}${patternExplorer()}<div class="grid-2">${muscleVolumeCard()}<article class="card"><div class="section-heading"><div><h2>Progreso por ejercicio</h2><p>Mejor carga realizada en cada sesión</p></div></div><div class="field"><label for="progress-exercise">Ejercicio</label><select id="progress-exercise">${exerciseCatalog()
-            .map((e) => `<option value="${e.id}">${esc(e.name)}</option>`)
-            .join(
-              "",
-            )}</select></div><div id="exercise-progress" class="spacer-top">${exerciseProgress("bench")}</div></article></div>`
+        ? `${periodControl()}${metrics()}${patternExplorer()}${
+            progressPattern === "cardio"
+              ? muscleVolumeCard()
+              : `<div class="grid-2">${muscleVolumeCard()}${exerciseProgressCard()}</div>`
+          }`
         : `${nutritionStats()}`
   }`;
 }
@@ -1048,6 +1049,20 @@ function weightPlot(weights) {
     )
     .join(" ");
   return `<svg class="weight-plot" viewBox="0 0 520 220" role="img" aria-label="Evolución de peso entre ${fmt(min, 1)} y ${fmt(max, 1)} kg">${[0, 1, 2, 3, 4].map((i) => `<line x1="45" y1="${25 + i * 42.5}" x2="505" y2="${25 + i * 42.5}" stroke="#e7ecdf" stroke-dasharray="4 4"/><text x="0" y="${29 + i * 42.5}" fill="#96a18b" font-size="10">${fmt(max - ((max - min) * i) / 4, 1)}</text>`).join("")}<polygon points="45,195 ${points} 500,195" fill="#eff4e7"/><polyline points="${points}" fill="none" stroke="#65894c" stroke-width="2.5" stroke-linejoin="round"/>${weights.map((w) => `<circle cx="${45 + ((Date.parse(w.date + "T12:00:00") - first) / (last - first)) * 455}" cy="${195 - ((w.kg - min) / (max - min)) * 170}" r="3.4" fill="#65894c"><title>${dateLabel(w.date)}: ${fmt(w.kg, 1)} kg</title></circle>`).join("")}</svg><div class="plot-labels"><span>${dateLabel(weights[0].date)}</span><span>${dateLabel(weights.at(-1).date)}</span></div>`;
+}
+function exerciseProgressCard() {
+  const list = exerciseCatalog().filter(
+    (e) => exerciseMovement(e).group === progressPattern,
+  );
+  const current = list.some((e) => e.id === progressExercise)
+    ? progressExercise
+    : list[0]?.id;
+  return `<article class="card"><div class="section-heading"><div><h2>Progreso por ejercicio</h2><p>Mejor carga realizada en cada sesión</p></div></div><div class="field"><label for="progress-exercise">Ejercicio</label><select id="progress-exercise">${list
+    .map(
+      (e) =>
+        `<option value="${e.id}" ${e.id === current ? "selected" : ""}>${esc(e.name)}</option>`,
+    )
+    .join("")}</select></div><div id="exercise-progress" class="spacer-top">${current ? exerciseProgress(current) : empty("Sin ejercicios de este patrón.", "Crea o elige otro patrón para ver su progreso por ejercicio.")}</div></article>`;
 }
 function exerciseProgress(id) {
   const rows = state.sessions
@@ -1337,8 +1352,10 @@ function bindPage() {
   });
   $("#progress-exercise")?.addEventListener(
     "change",
-    (e) =>
-      ($("#exercise-progress").innerHTML = exerciseProgress(e.target.value)),
+    (e) => {
+      progressExercise = e.target.value;
+      $("#exercise-progress").innerHTML = exerciseProgress(e.target.value);
+    },
   );
   $("#session-notes")?.addEventListener("input", (e) => {
     const s = state.sessions.find((s) => s.id === e.target.dataset.session);
@@ -2414,6 +2431,7 @@ document.addEventListener("click", (e) => {
     }
     case "progress-pattern":
       progressPattern = d.value;
+      progressExercise = null;
       render();
       break;
     case "finish-session": {
