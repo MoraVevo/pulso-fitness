@@ -49,23 +49,24 @@ function squatFamily(kind = "back") {
 
 // Sentadilla hack: trineo inclinado, discs en el riel y soporte sobre hombros.
 function hackSquat() {
-  return line("M86 158L206 40", C.metal, 4)
-    + line("M76 158L196 40", C.metal, 4)
-    + line("M78 160H124", C.metal, 5)
-    + line("M120 104L172 56", C.pad, 13)
-    + endOnWeight(174, 50)
-    + rect(112, 141, 56, 9, C.dark, 3)
-    + line("M112 145H168", "#5e767f", 2)
-    + leg([94, 108], [136, 118], [116, 135], true)
-    + arm([138, 76], [124, 96], [136, 78], true)
-    + leg([102, 110], [144, 122], [124, 135])
-    + profileTorso([142, 74], [100, 110])
-    + profileHead([142, 74], 160, 66)
-    + line("M150 62L142 48", C.metal, 4)
-    + `<g transform="rotate(-40 138 44)">` + rect(126, 39, 24, 9, C.dark, 3) + `</g>`
-    + arm([144, 80], [128, 100], [140, 82])
-    + grip(140, 82)
-    + arrow("M188 90L208 71", [209, 70], -133);
+  return line("M78 159L196 48M89 159L207 48", C.metal, 4)
+    + line("M75 161H135", C.metal, 5)
+    + line("M106 120L149 80", C.pad, 13)
+    + line("M108 117L147 81", "#708b95", 1.5)
+    + line("M149 80L165 65", C.metal, 5)
+    + endOnWeight(174, 57)
+    + rect(106, 148, 65, 9, C.dark, 3)
+    + line("M110 150H167", "#708b95", 1.5)
+    + leg([92, 112], [126, 120], [112, 142], true)
+    + arm([133, 76], [124, 96], [139, 82], true)
+    + leg([98, 115], [137, 124], [121, 142])
+    + profileTorso([137, 77], [98, 115])
+    + profileHead([137, 77], 153, 66)
+    + line("M151 80L144 70", C.metal, 4)
+    + `<g transform="rotate(-40 138 70)">` + rect(129, 66, 19, 8, C.pad, 3) + `</g>`
+    + line("M139 78L145 87", C.dark, 4)
+    + arm([138, 82], [126, 101], [142, 84]) + grip(142, 84)
+    + arrow("M182 104L201 86", [202, 85], -133);
 }
 
 // Prensa 45 grados: cuerpo reclinado empujando el trineo por su plataforma.

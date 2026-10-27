@@ -36,14 +36,32 @@ function bentRow(single = false) {
     + arrow("M158 141Q155 123 145 111",[144,110],140);
 }
 function seatedRow(machine = false) {
-  return (machine ? tower(190,73) + line("M158 57L178 62V105L149 112",C.metal,6)
-    + rect(109,91,9,29,C.pad,3) : tower(190,143))
+  if (machine) return machineRow();
+  return tower(190,143)
     + seat(63,122,52) + line("M156 143L163 156M154 144L167 136",C.dark,5)
     + leg([99,120],[136,131],[158,146],true) + leg([92,122],[129,136],[152,151])
     + torso(87,77,-5) + head(83,62)
-    + (machine ? line("M175 83L132 101",C.dark,4) : line("M203 143L128 103",C.dark,1.5))
+    + line("M203 143L128 103",C.dark,1.5)
     + arm([78,85],[104,108],[129,102],true) + arm([99,83],[113,111],[132,104])
     + line("M129 98L136 103L131 108",C.dark,3) + arrow("M157 113L137 109",[136,109],90);
+}
+// Remo con pecho apoyado: palanca y agarre quedan delante del cuerpo.
+function machineRow() {
+  return tower(193, 120)
+    + line("M206 120L173 113L151 94", C.metal, 6)
+    + ellipse(173, 113, 5, 5, C.dark)
+    + line("M74 128V160M64 162H147", C.metal, 5)
+    + seat(68, 124, 45)
+    + leg([94, 120], [130, 132], [135, 157], true)
+    + arm([104, 81], [115, 99], [145, 91], true)
+    + leg([98, 123], [140, 136], [145, 157])
+    + profileTorso([104, 78], [96, 120])
+    + profileHead([104, 78], 112, 62)
+    + line("M119 116V160M111 161H135", C.metal, 5)
+    + rect(113, 77, 9, 40, C.pad, 4)
+    + line("M151 85V102", C.dark, 5)
+    + arm([107, 84], [113, 108], [151, 94]) + grip(151, 94)
+    + arrow("M169 75H144", [143, 75], 90);
 }
 function supportedRow() {
   return line("M91 124L73 160M130 88L159 160M61 162H171",C.metal,5)
@@ -78,17 +96,23 @@ function rearDelt(machine = false) {
     + arrow("M79 64Q63 62 55 71",[54,72],40);
 }
 function reversePecDeck() {
-  return tower(183,42) + line("M196 42H140V36M140 36L72 79M140 36L88 77",C.metal,5)
-    + ellipse(140,36,7,7,C.dark) + ellipse(140,36,3,3,C.metal)
-    + line("M134 116V160M105 161H156",C.metal,5) + seat(96,126,43)
-    + leg([113,125],[145,131],[144,158],true)
-    + arm([116,82],[102,91],[88,86],true)
-    + leg([109,127],[137,135],[135,158])
-    + profileTorso([119,79],[109,121]) + profileHead([119,79],121,63)
-    + rect(130,80,9,35,C.pad,4)
-    + line("M72 79V94M88 77V91",C.dark,4)
-    + arm([118,85],[94,94],[72,88]) + grip(72,88)
-    + arrow("M104 60Q82 56 67 68",[66,69],45);
+  // Vista posterior: la cara mira al respaldo y las manos abren las palancas.
+  return tower(193, 34)
+    + line("M206 34H120M120 34L57 76M120 34L183 76", C.metal, 5)
+    + ellipse(120, 34, 6, 6, C.dark) + ellipse(120, 34, 2.5, 2.5, C.metal)
+    + rect(103, 79, 34, 49, C.pad, 5) + seat(98, 127, 44)
+    + leg([110, 122], [91, 137], [87, 157], true, -1)
+    + leg([130, 122], [149, 137], [153, 157])
+    + torso(120, 78, 0, true)
+    + rect(116, 68, 8, 9, C.shade, 2)
+    + ellipse(120, 61, 8, 10, C.skin)
+    + path("M112 63Q109 49 120 49Q131 49 128 63L126 69Q120 72 114 69Z", C.hair)
+    + line("M57 70V87M183 70V87", C.dark, 5)
+    + arm([105, 86], [80, 91], [57, 79], true)
+    + arm([135, 86], [160, 91], [183, 79])
+    + grip(57, 79) + grip(183, 79)
+    + arrow("M87 58Q72 52 61 60", [60, 61], 45)
+    + arrow("M153 58Q168 52 179 60", [180, 61], -45);
 }
 function facepull() {
   const farHand = [114,58], nearHand = [119,68], junction = [147,63];

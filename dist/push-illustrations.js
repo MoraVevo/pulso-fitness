@@ -16,14 +16,11 @@ function restingHead(x, y, angle = -90) {
 }
 
 function benchPress(kind = "barbell") {
-  const smith = kind === "smith", db = kind === "dumbbell";
+  if (kind === "smith") return smithPress();
+  const db = kind === "dumbbell";
   const farHand = db ? [86, 54] : [93, 60];
   const nearHand = db ? [111, 66] : [103, 64];
-  return (smith
-    ? line("M33 161V24H127V161M46 27V157M114 27V157M24 163H137", C.metal, 5)
-      + line("M46 64H114", C.metal, 3)
-      + rect(43, 58, 7, 12, C.dark) + rect(111, 58, 7, 12, C.dark)
-    : db ? "" : line("M40 158V66H51M29 160H53", C.metal, 4))
+  return (db ? "" : line("M40 158V66H51M29 160H53", C.metal, 4))
     + flatBench()
     + leg([137, 106], [165, 126], [163, 156], true)
     + arm([79, 103], [96, 87], farHand, true)
@@ -33,6 +30,25 @@ function benchPress(kind = "barbell") {
     + arm([82, 107], [110, 94], nearHand)
     + endOnWeight(...nearHand, db) + grip(...nearHand)
     + arrow("M137 85V49", [137, 48], 180);
+}
+
+// Perfil: la barra atraviesa la imagen en profundidad y se ve por su extremo.
+function smithPress() {
+  return line("M115 24V160M121 24V160M96 162H139", C.metal, 4)
+    + line("M115 24L121 24M115 160L121 160", C.dark, 3)
+    + rect(111, 59, 12, 18, C.dark, 2)
+    + flatBench()
+    + leg([137, 106], [165, 126], [163, 156], true)
+    + arm([79, 103], [96, 87], [100, 65], true)
+    + leg([142, 109], [180, 129], [180, 156])
+    + profileTorso([78, 106], [137, 106]) + restingHead(60, 103)
+    + arm([82, 107], [108, 93], [104, 70])
+    + line("M99 65L116 69", "#b5c3c8", 4)
+    + ellipse(115, 69, 9, 10, C.shoe)
+    + ellipse(116, 69, 6.5, 8, C.plate)
+    + ellipse(116, 69, 2, 2, "#b7c9ce")
+    + grip(100, 65) + grip(104, 70)
+    + arrow("M139 86V49", [139, 48], 180);
 }
 
 function inclinePress(db = true) {
@@ -82,13 +98,14 @@ function closeGripPress() {
 }
 
 function machinePress(incline = false) {
-  const shoulder = incline ? [94, 81] : [96, 77];
+  if (incline) return inclineMachinePress();
+  const shoulder = [96, 77];
   const hip = [106, 122];
-  const hand = incline ? [146, 69] : [149, 90];
+  const hand = [149, 90];
   return tower(188, 42)
-    + line(incline ? "M201 42H168L143 61" : "M201 42H163L150 83", C.metal, 6)
+    + line("M201 42H163L150 83", C.metal, 6)
     + line("M85 131V160M68 162H143", C.metal, 5)
-    + path(incline ? "M73 75L83 71 115 122 103 127Z" : "M76 65H87L98 124H86Z", C.pad)
+    + path("M76 65H87L98 124H86Z", C.pad)
     + seat(88, 125, 42)
     + leg([106, 121], [142, 133], [143, 157], true)
     + arm([shoulder[0] - 4, shoulder[1] + 3], [112, 101], [hand[0] - 6, hand[1] - 5], true)
@@ -96,8 +113,27 @@ function machinePress(incline = false) {
     + profileTorso(shoulder, hip) + profileHead(shoulder, shoulder[0] - 3, shoulder[1] - 17)
     + line(`M${hand[0]} ${hand[1] - 10}v20`, C.dark, 4)
     + arm([shoulder[0] + 4, shoulder[1] + 7], [119, 111], hand) + grip(...hand)
-    + (incline ? arrow("M155 104L174 74", [175, 73], -145)
-      : arrow("M146 118H174", [175, 118], -90));
+    + arrow("M146 118H174", [175, 118], -90);
+}
+
+// La palanca pivota desde abajo; el respaldo acompaña la inclinación del tronco.
+function inclineMachinePress() {
+  // Vista frontal de una máquina de palancas independientes cargada con discos.
+  return line("M52 40L48 157M188 40L192 157M35 161H205", C.metal, 5)
+    + line("M52 40L67 91L85 91M188 40L173 91L155 91", C.metal, 6)
+    + ellipse(52, 40, 6, 6, C.dark) + ellipse(188, 40, 6, 6, C.dark)
+    + ellipse(60, 65, 8, 11, C.plate) + ellipse(180, 65, 8, 11, C.plate)
+    + ellipse(60, 65, 2.5, 3, "#b7c9ce") + ellipse(180, 65, 2.5, 3, "#b7c9ce")
+    + rect(102, 70, 36, 56, C.pad, 5) + seat(98, 126, 44)
+    + leg([109, 121], [91, 139], [87, 157], true, -1)
+    + leg([131, 121], [149, 139], [153, 157])
+    + torso(120, 76) + head(120, 60)
+    + arm([105, 84], [82, 105], [85, 91], true)
+    + arm([135, 84], [158, 105], [155, 91])
+    + line("M77 91H91M149 91H163", C.dark, 5)
+    + grip(85, 91) + grip(155, 91)
+    + arrow("M73 79V59", [73, 58], 180)
+    + arrow("M167 79V59", [167, 58], 180);
 }
 
 function pushup(incline = false) {
@@ -116,17 +152,17 @@ function pushup(incline = false) {
 }
 
 function fly() {
-  return line("M78 122L62 159M160 143L175 159M49 162H192", C.metal, 5)
-    + path("M64 109L72 102 168 131 160 141Z", C.pad)
-    + leg([143, 118], [178, 131], [176, 155], true)
-    + arm([106, 100], [121, 74], [143, 57], true)
-    + dumbbell(143, 57, 25) + grip(143, 57)
-    + leg([148, 124], [192, 140], [190, 157])
-    + profileTorso([99, 108], [147, 121]) + restingHead(81, 103, -75)
-    + arm([100, 114], [80, 132], [53, 117])
-    + dumbbell(53, 117, -30) + grip(53, 117)
-    + arrow("M44 94Q48 66 75 59", [76, 59], -100)
-    + arrow("M160 48Q143 31 117 42", [116, 43], 60);
+  // El banco comparte la perspectiva del press; el arco distingue la apertura.
+  return flatBench()
+    + leg([137, 106], [165, 126], [163, 156], true)
+    + arm([79, 103], [84, 76], [86, 54], true)
+    + endOnWeight(86, 54, true) + grip(86, 54)
+    + leg([142, 109], [180, 129], [180, 156])
+    + profileTorso([78, 106], [137, 106]) + restingHead(60, 103)
+    + arm([82, 107], [101, 85], [111, 66])
+    + endOnWeight(111, 66, true) + grip(111, 66)
+    + arrow("M48 72Q53 50 69 45", [70, 45], -100)
+    + arrow("M148 86Q149 65 132 54", [131, 53], 135);
 }
 
 function pecDeck() {
@@ -160,14 +196,15 @@ function cableFly() {
 }
 
 function dips() {
-  return line("M60 162V88L84 79M157 162V88L181 79M48 164H73M145 164H170", C.metal, 5)
-    + leg([120, 114], [131, 139], [102, 149], true, -1)
-    + arm([108, 69], [137, 75], [158, 87], true)
-    + leg([116, 116], [119, 145], [88, 149], false, -1)
-    + profileTorso([102, 68], [119, 112]) + profileHead([102, 68],96, 51)
-    + line("M60 88L83 79M157 88L180 79", C.dark, 5)
-    + arm([101, 73], [87, 99], [73, 84]) + grip(73, 84) + grip(158, 87)
-    + arrow("M197 110V76", [197, 75], 180);
+  return line("M63 85H174M68 85V158M166 85V158", "#a6b7bc", 4)
+    + leg([104, 111], [117, 131], [94, 141], true, -1)
+    + arm([110, 67], [91, 73], [98, 85], true)
+    + leg([108, 113], [122, 135], [99, 146], false, -1)
+    + profileTorso([115, 69], [106, 111]) + profileHead([115, 69], 126, 52)
+    + line("M57 91H180M63 91V160M173 91V160M51 162H75M161 162H185", C.metal, 5)
+    + line("M88 91H119", C.dark, 5)
+    + arm([115, 75], [95, 80], [103, 91]) + grip(103, 91)
+    + arrow("M194 119V84", [194, 83], 180);
 }
 
 function overheadPress(kind = "barbell") {
