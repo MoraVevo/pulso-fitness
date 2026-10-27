@@ -7,6 +7,10 @@ import {
   weekDays,
   mealTotals,
   sessionVolume,
+  e1RM,
+  patternProgress,
+  trendWord,
+  routinePlan,
   kgToLb,
   lbToKg,
   exerciseLoadSuggestion,
@@ -424,4 +428,115 @@ test("importación rechaza valores imposibles, datos incompletos y fechas invál
     }),
     false,
   );
+});
+
+test("routinePlan deja las copias sin notas ni sensación del día", () => {
+  const planned = routinePlan([
+    {
+      exerciseId: "bench-bar",
+      name: "Press de banca",
+      note: "Buen agarre hoy",
+      feeling: 4,
+      sets: [{ kg: 40, reps: 8, rir: 2, done: true, recordedAt: 1700000000000 }],
+    },
+  ]);
+  assert.equal(planned[0].note, undefined);
+  assert.equal(planned[0].feeling, undefined);
+  assert.equal(planned[0].sets[0].done, false);
+  assert.equal(planned[0].sets[0].recordedAt, undefined);
+});
+
+test('e1RM: Epley puro y ajustado por RIR, con límite de fiabilidad', () => {
+  assert.ok(Math.abs(e1RM(100, 8) - 100 * (1 + 8 / 30)) < 1e-9);
+  assert.ok(Math.abs(e1RM(100, 6, 2) - e1RM(100, 8)) < 1e-9);
+  assert.equal(e1RM(0, 5), null);
+  assert.equal(e1RM(60, ''), null);
+  assert.equal(e1RM(100, 10, 5), null);
+  assert.equal(e1RM(100, 12, 0) != null, true);
+});
+
+test('trendWord: umbrales al ±5% y sin datos', () => {
+  assert.equal(trendWord(10), 'subió');
+  assert.equal(trendWord(5), 'estable');
+  assert.equal(trendWord(-5.1), 'bajó');
+  assert.equal(trendWord(null), null);
+});
+
+test('patternProgress: ocho cubetas, series efectivas por RIR y semanas sin registros', () => {
+  const end = '2026-10-27';
+  const mk = (date, kg, reps, rir) => ({
+    id: 's-' + date + '-' + kg,
+    date,
+    finished: true,
+    feeling: 3,
+    notes: '',
+    exercises: [
+      {
+        exerciseId: 'pullup',
+        movement: 'pull',
+        name: 'Dominadas',
+        sets: [{ kg, reps, rir, done: true }],
+      },
+    ],
+  });
+  const sessions = [
+    mk('2026-10-27', 30, 8, ''),
+    mk('2026-10-20', 10, 8, 5),
+    mk('2026-09-29', 20, 6, 2),
+  ];
+  const data = patternProgress(sessions, [], end, 'pull');
+  assert.equal(data.weeks.length, 8);
+  assert.equal(data.weeks[7].start, '2026-10-21');
+  assert.equal(data.weeks[7].end, '2026-10-27');
+  assert.equal(data.weeks[7].sets, 1);
+  assert.equal(data.weeks[7].sessions, 1);
+  assert.equal(data.weeks[7].effectiveSets, 1);
+  assert.equal(data.weeks[6].sets, 1);
+  assert.equal(data.weeks[6].effectiveSets, 0);
+  assert.equal(data.weeks[6].hasData, true);
+  assert.equal(data.weeks[5].hasData, false);
+  assert.equal(data.weeks[3].effectiveSets, 1);
+  assert.equal(data.weeks[3].volume, 20 * 6);
+  const ex = data.exercises.find((e) => e.exerciseId === 'pullup');
+  assert.equal(ex.sets, 3);
+  assert.ok(Math.abs(ex.e1RM.best - e1RM(30, 8)) < 1e-9);
+  assert.ok(Math.abs(ex.e1RM.prevBest - e1RM(20, 6, 2)) < 1e-9);
+  assert.equal(ex.e1RM.isPR, true);
+  assert.ok(data.summary.sets.deltaPct !== null);
+});
+
+test('patternProgress: cardio suma minutos por cubeta sin tocar la fuerza', () => {
+  const end = '2026-10-27';
+  const cardio = [
+    { date: '2026-10-26', minutes: 30, kcal: 97 },
+    { date: '2026-10-13', minutes: 45, kcal: 150 },
+  ];
+  const cardioRun = patternProgress([], cardio, end, 'cardio');
+  assert.equal(cardioRun.weeks[7].minutes, 30);
+  assert.equal(cardioRun.weeks[7].kcal, 97);
+  assert.equal(cardioRun.weeks[5].minutes, 45);
+  assert.equal(cardioRun.exercises.length, 0);
+  const pullRun = patternProgress([], cardio, end, 'pull');
+  assert.equal(pullRun.weeks[7].minutes, 0);
+});
+
+test('patternProgress no muta los registros de entrada', () => {
+  const session = {
+    id: 'x',
+    date: '2026-10-27',
+    finished: true,
+    feeling: 3,
+    notes: '',
+    exercises: [
+      {
+        exerciseId: 'pullup',
+        movement: 'pull',
+        name: 'Dominadas',
+        sets: [{ kg: 10, reps: 8, rir: '', done: true }],
+      },
+    ],
+  };
+  const before = JSON.stringify(session);
+  patternProgress([session], [], '2026-10-27', 'pull');
+  assert.equal(JSON.stringify(session), before);
 });

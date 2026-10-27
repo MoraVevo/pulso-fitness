@@ -99,7 +99,8 @@ export function pendingSet({ recordedAt, ...set }) {
   return { ...set, done: false };
 }
 export function routinePlan(exercises) {
-  return structuredClone(exercises).map((ex) => ({
+  // Las notas y la sensación son del día registrado; no viajan a rutinas ni repeticiones.
+  return structuredClone(exercises).map(({ note, feeling, ...ex }) => ({
     ...ex,
     sets: (ex.sets.length ? ex.sets : [{ kg: 0, reps: "", rir: "" }]).map(
       pendingSet,
@@ -230,6 +231,158 @@ export function weightStats(weights, date) {
     average: avg(recent),
     change:
       recent.length && previous.length ? avg(recent) - avg(previous) : null,
+  };
+}
+
+// Estimación de 1RM por Epley (kg × (1 + reps/30)), ajustada con el RIR de la
+// serie: fiable hasta ~12 repeticiones efectivas. RIR vacío cuenta como 0 (al
+// fallo), la convención documentada de la app. Fuera de rango devuelve null.
+export const e1RM = (kg, reps, rir = 0) => {
+  const toFailure = reps + (Number.isFinite(rir) ? rir : 0);
+  return kg > 0 && Number.isSafeInteger(reps) && reps > 0 && toFailure <= 12
+    ? kg * (1 + toFailure / 30)
+    : null;
+};
+
+// Serie efectiva: hecha y con RIR ≤ 3 (el RIR vacío ya entra como 0).
+export const isEffectiveSet = (set) =>
+  Boolean(set?.done) && Number(set.rir ?? 0) <= 3;
+
+// Lectura plana de un cambio porcentual: sin datos comparables devuelve null.
+export const trendWord = (deltaPct) =>
+  deltaPct == null
+    ? null
+    : deltaPct > 5
+      ? "subió"
+      : deltaPct < -5
+        ? "bajó"
+        : "estable";
+
+// Ocho cubetas de 7 días terminando en endDate, con series, series efectivas,
+// volumen (fuerza) o minutos/kcal (cardio) por semana, comparación de bloques
+// (últimas 4 semanas vs 4 previas) y mejor e1RM por ejercicio. Solo lectura:
+// no muta los registros. Las semanas sin registros quedan con hasData=false
+// (no cuentan como cero). La clasificación usa el campo movement del ejercicio.
+export function patternProgress(sessions, cardioRecords = [], endDate, pattern) {
+  const isStrength = pattern !== "cardio";
+  const buckets = [];
+  for (let i = 7; i >= 0; i--) {
+    const end = shiftDate(endDate, -7 * i);
+    buckets.push({
+      start: shiftDate(end, -6),
+      end,
+      sessions: 0,
+      sets: 0,
+      effectiveSets: 0,
+      volume: 0,
+      minutes: 0,
+      kcal: 0,
+      hasData: false,
+    });
+  }
+  const weekIndex = (date) =>
+    7 - Math.floor(
+      (Date.parse(endDate + "T12:00:00") - Date.parse(date + "T12:00:00")) /
+        604800000,
+    );
+  const horizon = shiftDate(endDate, -55);
+  const sessionSets = buckets.map(() => new Set());
+  const byExercise = new Map();
+  if (isStrength) {
+    for (const session of sessions) {
+      if (session.date > endDate || session.date < horizon) continue;
+      for (const ex of session.exercises) {
+        if (ex.movement !== pattern) continue;
+        const done = ex.sets.filter((set) => set.done);
+        if (!done.length) continue;
+        const index = weekIndex(session.date);
+        const bucket = buckets[index];
+        bucket.hasData = true;
+        sessionSets[index].add(session.id);
+        const agg = byExercise.get(ex.exerciseId) || {
+          exerciseId: ex.exerciseId,
+          name: ex.name,
+          sessionIds: new Set(),
+          sets: 0,
+          volume: 0,
+          best: null,
+          bestDate: null,
+          prevBest: null,
+        };
+        byExercise.set(ex.exerciseId, agg);
+        agg.sessionIds.add(session.id);
+        for (const set of done) {
+          bucket.sets += 1;
+          if (isEffectiveSet(set)) bucket.effectiveSets += 1;
+          bucket.volume += (set.kg || 0) * (set.reps || 0);
+          agg.sets += 1;
+          agg.volume += (set.kg || 0) * (set.reps || 0);
+          const est = e1RM(set.kg, set.reps, set.rir);
+          if (est == null) continue;
+          if (index >= 4) {
+            if (agg.best == null || est > agg.best) {
+              agg.best = est;
+              agg.bestDate = session.date;
+            }
+          } else if (agg.prevBest == null || est > agg.prevBest) {
+            agg.prevBest = est;
+          }
+        }
+      }
+    }
+  } else {
+    for (const record of cardioRecords) {
+      if (record.date > endDate || record.date < horizon) continue;
+      const bucket = buckets[weekIndex(record.date)];
+      bucket.minutes += record.minutes;
+      bucket.kcal += record.kcal;
+      bucket.hasData = true;
+    }
+  }
+  const delta = (last, prev) =>
+    prev > 0 ? Math.round(((last - prev) / prev) * 1000) / 10 : null;
+  buckets.forEach((b, i) => {
+    b.sessions = sessionSets[i].size;
+  });
+  const blocks = (key) => {
+    const total = (from, to) =>
+      buckets.slice(from, to).reduce((n, b) => n + b[key], 0);
+    const last4 = total(4, 8);
+    const prev4 = total(0, 4);
+    return { last4, prev4, deltaPct: delta(last4, prev4) };
+  };
+  return {
+    pattern,
+    weeks: buckets,
+    summary: {
+      sets: blocks("sets"),
+      effectiveSets: blocks("effectiveSets"),
+      volume: blocks("volume"),
+      minutes: blocks("minutes"),
+      kcal: blocks("kcal"),
+    },
+    exercises: isStrength
+      ? [...byExercise.values()]
+          .map(({ sessionIds, ...ex }) => ({
+            ...ex,
+            sessions: sessionIds.size,
+            e1RM: {
+              best: ex.best,
+              bestDate: ex.bestDate,
+              prevBest: ex.prevBest,
+              deltaPct:
+                ex.best != null && ex.prevBest > 0
+                  ? Math.round(((ex.best - ex.prevBest) / ex.prevBest) * 1000) /
+                    10
+                  : null,
+              isPR:
+                ex.best != null &&
+                weekIndex(ex.bestDate) === 7 &&
+                (ex.prevBest == null || ex.best > ex.prevBest),
+            },
+          }))
+          .sort((a, b) => b.volume - a.volume)
+      : [],
   };
 }
 export function validState(s) {

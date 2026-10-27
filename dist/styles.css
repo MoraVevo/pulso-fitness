@@ -1257,6 +1257,37 @@ svg {
   border-color: #7d9f58;
   background: #edf4e4;
 }
+.exercise-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 13px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+}
+.exercise-note {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  border-radius: 10px;
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--ink);
+}
+.exercise-note::placeholder {
+  color: #a9b3a4;
+}
+.feeling.mini {
+  gap: 5px;
+  margin-top: 0;
+}
+.feeling.mini button {
+  width: 32px;
+  height: 30px;
+  font-size: 15px;
+  border-radius: 8px;
+}
 .volume-row {
   margin: 18px 0;
 }
@@ -1298,6 +1329,9 @@ svg {
   border-radius: 10px;
   width: max-content;
   margin-bottom: 23px;
+}
+.tabs[aria-label="Entrenamiento"] {
+  margin-inline: auto;
 }
 .tab {
   border: 0;
@@ -3095,6 +3129,7 @@ dialog:has(.routine-builder) > .modal-header {
     width: 100%;
     display: flex;
     overflow: auto;
+    justify-content: safe center;
   }
   .tabs[aria-label="Entrenamiento"] .tab {
     padding: 9px 8px;
@@ -3309,5 +3344,106 @@ dialog:has(.routine-builder) > .modal-header {
 @media (max-width: 720px) {
   .pattern-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* Explorador de progreso por patrón de movimiento */
+.pattern-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 16px;
+}
+.pattern-chips button {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.pattern-chips button.active {
+  background: var(--soft);
+  border-color: #b9cba0;
+  color: var(--green);
+}
+.pattern-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.pattern-metrics .cell {
+  background: var(--bg);
+  border-radius: 14px;
+  padding: 11px 12px;
+}
+.pattern-metrics .cell h3 {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.pattern-metrics .cell .big-number {
+  display: block;
+  margin-top: 5px;
+}
+.pattern-metrics .cell span {
+  display: block;
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 1px;
+}
+.pattern-metrics .cell .trend-badge {
+  margin-top: 7px;
+}
+.trend-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+.trend-badge.up {
+  background: #edf4e4;
+  color: #4d7134;
+}
+.trend-badge.down {
+  background: #f9ede2;
+  color: #a4653a;
+}
+.trend-badge.flat {
+  background: #eef0ea;
+  color: var(--muted);
+}
+.pattern-sub {
+  margin: 18px 0 10px;
+}
+.pattern-plot {
+  width: 100%;
+  height: auto;
+  margin-top: 6px;
+}
+.pattern-explorer .plot-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.e1rm-cell {
+  margin-left: auto;
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+@media (max-width: 720px) {
+  .pattern-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

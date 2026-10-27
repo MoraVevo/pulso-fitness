@@ -17,6 +17,9 @@ import {
   trainingStats,
   trainingDays,
   weightStats,
+  e1RM,
+  patternProgress,
+  trendWord,
   validState,
 } from "./core.js";
 import {
@@ -134,6 +137,7 @@ let view = "home";
 let selectedDate = today();
 let tab = "session";
 let progressTab = "weight";
+let progressPattern = "pull";
 let currentSessionId = null;
 let foodFilter = "Todos";
 let libraryQuery = "";
@@ -724,6 +728,10 @@ function sessionEditor(s) {
           </div>`).join("")}
       </div>
       <button class="set-add" data-action="add-set" data-session="${s.id}" data-ei="${ei}">+ Añadir serie</button>
+      <div class="exercise-foot">
+        <div class="feeling mini" role="group" aria-label="Sensación de ${esc(ex.name)}">${["😣", "😕", "😐", "🙂", "🤩"].map((emoji, i) => `<button type="button" class="${ex.feeling === i + 1 ? "selected" : ""}" data-action="exercise-feeling" data-session="${s.id}" data-ei="${ei}" data-value="${i + 1}" aria-label="Sensación ${i + 1} de 5 en ${esc(ex.name)}" aria-pressed="${ex.feeling === i + 1}">${emoji}</button>`).join("")}</div>
+        <input class="exercise-note" type="text" data-session="${s.id}" data-ei="${ei}" maxlength="280" placeholder="Nota: agarre, molestias, progresos…" value="${esc(ex.note || "")}">
+      </div>
     </div>`).join("")}
   ${button("Añadir ejercicio", "add-exercise", "plus", "full", `data-id="${s.id}"`)}
   ${s.exercises.length ? button("Guardar como rutina", "save-session-routine", "book", "full spacer-top", `data-id="${s.id}"`) : ""}
@@ -1012,7 +1020,7 @@ function progressPage() {
               )
         }</div></article></div>`
       : progressTab === "strength"
-        ? `${periodControl()}${metrics()}<div class="grid-2">${muscleVolumeCard()}<article class="card"><div class="section-heading"><div><h2>Progreso por ejercicio</h2><p>Mejor carga realizada en cada sesión</p></div></div><div class="field"><label for="progress-exercise">Ejercicio</label><select id="progress-exercise">${exerciseCatalog()
+        ? `${periodControl()}${metrics()}${patternExplorer()}<div class="grid-2">${muscleVolumeCard()}<article class="card"><div class="section-heading"><div><h2>Progreso por ejercicio</h2><p>Mejor carga realizada en cada sesión</p></div></div><div class="field"><label for="progress-exercise">Ejercicio</label><select id="progress-exercise">${exerciseCatalog()
             .map((e) => `<option value="${e.id}">${esc(e.name)}</option>`)
             .join(
               "",
@@ -1044,27 +1052,157 @@ function weightPlot(weights) {
 function exerciseProgress(id) {
   const rows = state.sessions
     .filter((s) => s.finished && s.date <= selectedDate)
-    .sort((a, b) => b.date.localeCompare(a.date))
-    .map((s) => ({
-      date: s.date,
-      sets: s.exercises
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((s) => {
+      const sets = s.exercises
         .filter((e) => e.exerciseId === id)
-        .flatMap((e) => e.sets.filter((t) => t.done)),
-    }))
-    .filter((s) => s.sets.length);
+        .flatMap((e) => e.sets.filter((t) => t.done));
+      const estimates = sets
+        .map((t) => e1RM(t.kg, t.reps, t.rir))
+        .filter((v) => v != null);
+      return {
+        date: s.date,
+        sets,
+        e1: estimates.length ? Math.max(...estimates) : null,
+      };
+    })
+    .filter((r) => r.sets.length);
   if (!rows.length)
     return empty(
       "Todavía no hay series para comparar.",
       "Completa una sesión con este ejercicio.",
     );
-  return `<div class="weight-log">${rows
-    .map((r) => {
+  let running = -Infinity;
+  for (const r of rows) {
+    r.pr = r.e1 != null && r.e1 > running;
+    if (r.e1 != null && r.e1 > running) running = r.e1;
+  }
+  const recent = rows.filter(
+    (r) => r.date > shiftDate(selectedDate, -56) && r.e1 != null,
+  );
+  const prior = rows.filter(
+    (r) =>
+      r.date > shiftDate(selectedDate, -112) &&
+      r.date <= shiftDate(selectedDate, -56) &&
+      r.e1 != null,
+  );
+  const best8 = recent.length ? Math.max(...recent.map((r) => r.e1)) : null;
+  const prev8 = prior.length ? Math.max(...prior.map((r) => r.e1)) : null;
+  const delta8 = best8 != null && prev8 ? ((best8 - prev8) / prev8) * 100 : null;
+  return `<p class="help-text">Mejor e1RM de las últimas 8 semanas: <b>${best8 != null ? `${fmt(best8, 1)} kg` : "—"}</b> ${trendBadge(delta8)}</p><div class="weight-log">${rows
+    .map((r, i) => {
       const best = r.sets.reduce((a, b) =>
         b.kg > a.kg || (b.kg === a.kg && b.reps > a.reps) ? b : a,
       );
-      return `<div class="history-row"><div><h4>${dateLabel(r.date)}</h4><p>${r.sets.length} series · ${fmt(sum(r.sets, (t) => t.kg * t.reps))} kg de volumen</p></div><b style="margin-left:auto">${fmt(best.kg)} kg × ${best.reps}</b></div>`;
+      const before = rows[i - 1];
+      const delta =
+        r.e1 != null && before?.e1 != null ? (r.e1 - before.e1) / before.e1 * 100 : null;
+      return `<div class="history-row"><div><h4>${dateLabel(r.date)}${r.pr ? ' <span class="tag green">PR</span>' : ""}</h4><p>${r.sets.length} series · ${fmt(sum(r.sets, (t) => t.kg * t.reps))} kg de volumen</p></div><div class="e1rm-cell"><b>${fmt(best.kg)} kg × ${best.reps}</b>${trendBadge(delta)}</div></div>`;
     })
-    .join("")}</div>`;
+    .reverse()
+    .join("")}</div><p class="source-note">e1RM: estimación de tu 1RM por la fórmula de Epley desde la mejor serie; orientativa y fiable hasta ~10 repeticiones efectivas.</p>`;
+}
+const PATTERN_CHIPS = [
+  ["push", "Empuje"],
+  ["pull", "Jale"],
+  ["legs", "Pierna"],
+  ["core", "Core"],
+  ["cardio", "Cardio"],
+];
+function trendBadge(deltaPct) {
+  const word = trendWord(deltaPct);
+  if (word == null) return "";
+  const cls = word === "subió" ? "up" : word === "bajó" ? "down" : "flat";
+  const arrow = word === "subió" ? "▲" : word === "bajó" ? "▼" : "→";
+  return `<span class="trend-badge ${cls}">${arrow} ${deltaPct > 0 ? "+" : ""}${fmt(deltaPct, 1)}%</span>`;
+}
+function patternCell(label, value, unit, deltaPct) {
+  return `<div class="cell"><h3>${label}</h3><strong class="big-number">${value}</strong><span>${unit}</span>${trendBadge(deltaPct)}</div>`;
+}
+function patternChart(weeks, key, unit, reference) {
+  const slots = weeks.map((w, i) => ({
+    i,
+    x: 45 + (i * 460) / 7,
+    v: w[key],
+    has: w.hasData,
+  }));
+  const values = slots.filter((s) => s.has).map((s) => s.v);
+  if (!values.length)
+    return '<p class="help-text">Sin registros en estas ocho semanas.</p>';
+  const max = Math.ceil(Math.max(...values, reference || 0) / 10) * 10 || 10;
+  const y = (v) => 195 - (v / max) * 170;
+  const runs = [];
+  let run = [];
+  for (const s of slots) {
+    if (s.has) run.push(s);
+    else if (run.length) {
+      runs.push(run);
+      run = [];
+    }
+  }
+  if (run.length) runs.push(run);
+  const series = runs
+    .map((r) =>
+      `${r.length > 1 ? `<polygon points="${r[0].x},195 ${r.map((s) => `${s.x},${y(s.v)}`).join(" ")} ${r.at(-1).x},195" fill="#eff4e7"/>` : ""}<polyline points="${r.map((s) => `${s.x},${y(s.v)}`).join(" ")}" fill="none" stroke="#65894c" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>${r
+        .map(
+          (s) =>
+            `<circle cx="${s.x}" cy="${y(s.v)}" r="3.4" fill="#65894c"><title>${dateLabel(weeks[s.i].start, { day: "numeric", month: "short" })}: ${fmt(s.v, s.v % 1 ? 1 : 0)} ${unit}</title></circle>`,
+        )
+        .join("")}`,
+    )
+    .join("");
+  const grid = [0, 1, 2, 3, 4]
+    .map((i) => {
+      const v = (max * (4 - i)) / 4;
+      return `<line x1="45" y1="${25 + i * 42.5}" x2="505" y2="${25 + i * 42.5}" stroke="#e7ecdf" stroke-dasharray="4 4"/><text x="0" y="${29 + i * 42.5}" fill="#96a18b" font-size="10">${fmt(v, v % 1 ? 1 : 0)}</text>`;
+    })
+    .join("");
+  const ref = reference
+    ? `<line x1="45" x2="505" y1="${y(reference)}" y2="${y(reference)}" stroke="#8da5b8" stroke-width="1.6" stroke-dasharray="6 5"/><text x="394" y="${y(reference) - 6}" fill="#5f7c96" font-size="10">${reference} ${unit} · OMS</text>`
+    : "";
+  return `<svg class="pattern-plot" viewBox="0 0 520 220" role="img" aria-label="Semanal de ${unit} por patrón">${grid}${series}${ref}</svg><div class="plot-labels"><span>${dateLabel(weeks[0].start, { day: "numeric", month: "short" })}</span><span>${dateLabel(weeks.at(-1).end, { day: "numeric", month: "short" })}</span></div>`;
+}
+function patternExplorer() {
+  const data = patternProgress(
+    state.sessions,
+    state.cardio || [],
+    selectedDate,
+    progressPattern,
+  );
+  const chips = `<div class="pattern-chips" role="group" aria-label="Elegir patrón de movimiento">${PATTERN_CHIPS.map(
+    ([id, label]) =>
+      `<button type="button" class="${progressPattern === id ? "active" : ""}" data-action="progress-pattern" data-value="${id}" aria-pressed="${progressPattern === id}">${label}</button>`,
+  ).join("")}</div>`;
+  const methodNote = `<p class="source-note">${
+    progressPattern === "cardio"
+      ? 'Referencia de la OMS (2020) para adultos: 150–300 min semanales de actividad moderada. Las kcal activas se estiman con el Compendio de Actividades Físicas 2024. Las semanas sin registros no cuentan como cero. <a href="https://www.who.int/publications/i/item/9789240015128" target="_blank" rel="noopener">Directrices de la OMS</a> · <a href="https://pacompendium.com/" target="_blank" rel="noopener">Compendio 2024</a>.'
+      : 'Las series efectivas son las hechas con RIR ≤ 3 (un RIR vacío cuenta como 0, al fallo), la forma habitual de contar la dosis semanal en la literatura de fuerza. El e1RM estima tu 1RM con la fórmula de Epley desde tu mejor serie; es orientativo y fiable hasta ~10 repeticiones efectivas. Las semanas sin registros no cuentan como cero. <a href="https://pubmed.ncbi.nlm.nih.gov/28755134/" target="_blank" rel="noopener">Dosis semanal de series (Schoenfeld et al., 2017)</a> · <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC10933212/" target="_blank" rel="noopener">Repeticiones y %1RM (Nuzzo et al., 2023)</a>.'
+  }</p>`;
+  if (progressPattern === "cardio") {
+    const perWeek = data.summary.minutes.last4 / 4;
+    return `<section class="card pattern-explorer"><div class="section-heading"><div><h2>Explora por patrón</h2><p>Ocho semanas terminando en ${dateLabel(selectedDate)}</p></div>${icon("chart")}</div>${chips}<div class="pattern-metrics">${patternCell("Minutos por semana", fmt(perWeek, perWeek % 1 ? 1 : 0), "min activos", data.summary.minutes.deltaPct)}${patternCell("Kcal activas (4 sem)", fmt(data.summary.kcal.last4), "kcal", data.summary.kcal.deltaPct)}</div>${patternChart(data.weeks, "minutes", "min", 150)}${methodNote}</section>`;
+  }
+  const eff = data.summary.effectiveSets;
+  const vol = data.summary.volume;
+  const perWeek = eff.last4 / 4;
+  const bestE = data.exercises
+    .filter((e) => e.e1RM.best != null)
+    .sort((a, b) => b.e1RM.best - a.e1RM.best)[0];
+  const list = data.exercises.length
+    ? `<h3 class="pattern-sub">Ejercicios del patrón</h3><div class="weight-log pattern-exercises">${data.exercises
+        .map(
+          (ex) =>
+            `<div class="history-row"><div><h4>${esc(ex.name)}${ex.e1RM.isPR ? ' <span class="tag green">PR</span>' : ""}</h4><p>${ex.sessions} ${ex.sessions === 1 ? "sesión" : "sesiones"} · ${ex.sets} series · ${fmt(ex.volume)} kg</p></div><div class="e1rm-cell">${ex.e1RM.best != null ? `<b>${fmt(ex.e1RM.best, 1)} kg</b>${trendBadge(ex.e1RM.deltaPct)}` : "<b>—</b>"}</div></div>`,
+        )
+        .join("")}</div>${patternChart(data.weeks, "volume", "kg", 0)}`
+    : empty(
+        "Sin series de este patrón todavía.",
+        "Registra una sesión con ejercicios de este patrón y aquí verás tu volumen, tus series efectivas y tu mejor e1RM.",
+        "new-session",
+        "Crear sesión",
+        "dumbbell",
+      );
+  return `<section class="card pattern-explorer"><div class="section-heading"><div><h2>Explora por patrón</h2><p>Ocho semanas terminando en ${dateLabel(selectedDate)}</p></div>${icon("chart")}</div>${chips}<div class="pattern-metrics">${patternCell("Series efectivas / semana", fmt(perWeek, perWeek % 1 ? 1 : 0), "RIR ≤ 3", eff.deltaPct)}${patternCell("Volumen / semana", fmt(vol.last4 / 4), "kg", vol.deltaPct)}${patternCell("Sesiones (8 sem)", fmt(data.weeks.reduce((n, w) => n + w.sessions, 0)), "con este patrón", null)}${patternCell("Mejor e1RM", bestE ? fmt(bestE.e1RM.best, 1) : "—", bestE ? `kg · ${esc(bestE.name)}` : "kg", null)}</div>${list}${methodNote}</section>`;
 }
 function nutritionStats() {
   const dates = Array.from({ length: 7 }, (_, i) =>
@@ -1532,6 +1670,8 @@ function makeExercise(ex, date = selectedDate) {
     primaryMuscles: roles.primary,
     secondaryMuscles: roles.secondary,
     muscleRegions: exerciseRegions(ex),
+    note: "",
+    feeling: 0,
     sets: Array.from({ length: 3 }, () => ({
       kg: load.kg,
       unit,
@@ -1966,6 +2106,16 @@ document.addEventListener("click", (event) => {
     return;
   }
 });
+document.addEventListener("input", (e) => {
+  const note = e.target.closest?.(".exercise-note");
+  if (!note) return;
+  const s = state.sessions.find((s) => s.id === note.dataset.session);
+  const ex = s?.exercises[+note.dataset.ei];
+  if (ex) {
+    ex.note = note.value;
+    persist();
+  }
+});
 document.addEventListener("click", (e) => {
   const muscleToggle = e.target.closest('[data-action="toggle-muscle"]');
   if (muscleToggle) {
@@ -2253,6 +2403,18 @@ document.addEventListener("click", (e) => {
     case "feeling":
       state.sessions.find((s) => s.id === d.id).feeling = +d.value;
       save();
+      break;
+    case "exercise-feeling": {
+      const s = state.sessions.find((s) => s.id === d.session);
+      const ex = s?.exercises[+d.ei];
+      if (!ex) break;
+      ex.feeling = +d.value;
+      save();
+      break;
+    }
+    case "progress-pattern":
+      progressPattern = d.value;
+      render();
       break;
     case "finish-session": {
       const s = state.sessions.find((s) => s.id === d.id);
