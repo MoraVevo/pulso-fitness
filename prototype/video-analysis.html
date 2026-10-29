@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pulso · Prototipo de análisis por video</title>
+    <style>
+      :root {
+        --green: #254c3e;
+        --green-soft: #e7efe9;
+        --ink: #1f2d27;
+        --muted: #5f6f67;
+        --line: #d7e2db;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0 auto;
+        padding: 20px 16px 48px;
+        max-width: 760px;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        color: var(--ink);
+        background: #f6f8f6;
+      }
+      h1 { font-size: 1.25rem; margin: 0 0 4px; }
+      p.sub { margin: 0 0 16px; color: var(--muted); font-size: 0.9rem; }
+      .card {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 16px;
+        margin-bottom: 14px;
+      }
+      .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+      button, select {
+        font: inherit;
+        padding: 9px 14px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: #fff;
+        cursor: pointer;
+      }
+      button.primary { background: var(--green); color: #fff; border-color: var(--green); }
+      button:disabled { opacity: 0.45; cursor: not-allowed; }
+      #status { font-size: 0.85rem; color: var(--muted); margin-top: 10px; min-height: 1.2em; }
+      #status.err { color: #a33; }
+      #stage { position: relative; max-width: 420px; margin: 0 auto; }
+      #stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+      #video {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0.01;
+        pointer-events: none;
+      }
+      #frameWrap { position: relative; width: 100%; }
+      #frame { width: 100%; display: block; border-radius: 10px; background: #000; }
+      .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+      .grid2 canvas { width: 100%; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+      .stat { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed var(--line); font-size: 0.9rem; }
+      .stat b { font-variant-numeric: tabular-nums; }
+      label.file {
+        display: inline-block; padding: 9px 14px; border-radius: 10px;
+        border: 1px solid var(--line); background: #fff; cursor: pointer;
+      }
+      label.file input { display: none; }
+      .progress { height: 8px; background: var(--green-soft); border-radius: 6px; overflow: hidden; margin-top: 10px; }
+      .progress i { display: block; height: 100%; width: 0; background: var(--green); transition: width 0.2s; }
+      details { font-size: 0.85rem; color: var(--muted); margin-top: 8px; }
+      a { color: var(--green); }
+    </style>
+  </head>
+  <body>
+    <h1>Prototipo · Análisis de sentadilla por video</h1>
+    <p class="sub">
+      Todo se procesa en este navegador: el video no se sube a ningún servidor.
+      Vista lateral, cuerpo completo visible, una serie por video.
+    </p>
+
+    <div class="card">
+      <div class="row">
+        <label class="file">Elegir video<input id="file" type="file" accept="video/*" /></label>
+        <button id="sample" class="hide" hidden>Usar video de ejemplo</button>
+        <label>Frecuencia
+          <select id="hz">
+            <option value="12">12 fotogramas/s</option>
+            <option value="18" selected>18 fotogramas/s</option>
+            <option value="24">24 fotogramas/s</option>
+          </select>
+        </label>
+        <button id="run" class="primary" disabled>Analizar</button>
+        <button id="cancel" disabled>Cancelar</button>
+        <button id="export" disabled>Descargar fixture JSON</button>
+      </div>
+      <div class="progress"><i id="bar"></i></div>
+      <div id="status">Cargando el modelo…</div>
+    </div>
+
+    <div class="card">
+      <div id="stage">
+        <div id="frameWrap"><canvas id="frame"></canvas></div>
+        <canvas id="overlay"></canvas>
+      </div>
+      <video id="video" muted playsinline preload="auto"></video>
+    </div>
+
+    <div class="card grid2">
+      <canvas id="angle" width="640" height="240"></canvas>
+      <canvas id="barpath" width="640" height="240"></canvas>
+    </div>
+
+    <div class="card">
+      <div class="stat"><span>Fotogramas analizados</span><b id="stFrames">–</b></div>
+      <div class="stat"><span>Duración del procesamiento</span><b id="stTime">–</b></div>
+      <div class="stat"><span>Visibilidad media del cuerpo</span><b id="stVis">–</b></div>
+      <div class="stat"><span>Repeticiones detectadas (avance)</span><b id="stReps">–</b></div>
+      <div class="stat"><span>Excéntrica media / Concéntrica media</span><b id="stTempo">–</b></div>
+      <details>
+        <summary>Lados y puntos usados</summary>
+        <div id="debug">–</div>
+      </details>
+    </div>
+
+    <script type="module">
+      import { FilesetResolver, PoseLandmarker } from "/vendor/mediapipe/vision_bundle.mjs";
+
+      const $ = (s) => document.querySelector(s);
+      const statusEl = $("#status");
+      const say = (msg, err = false) => {
+        statusEl.textContent = msg;
+        statusEl.classList.toggle("err", err);
+      };
+
+      // Índices de landmarks de MediaPipe Pose (33 puntos).
+      const L = { nose: 0, lHip: 23, rHip: 24, lKnee: 25, rKnee: 26, lAnkle: 27, rAnkle: 28, lWrist: 15, rWrist: 16 };
+      const PAIRS = [
+        [11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 12], [11, 23], [12, 24],
+        [23, 24], [23, 25], [25, 27], [24, 26], [26, 28], [27, 31], [28, 32], [0, 11], [0, 12],
+      ];
+
+      let landmarker = null;
+      let cancelFlag = false;
+      let fixture = null;
+
+      try {
+        const files = await FilesetResolver.forVisionTasks("/vendor/mediapipe/wasm");
+        const make = (delegate) =>
+          PoseLandmarker.createFromOptions(files, {
+            baseOptions: { modelAssetPath: "/vendor/mediapipe/models/pose_landmarker_lite.task", delegate },
+            runningMode: "VIDEO",
+            numPoses: 1,
+          });
+        try {
+          landmarker = await make("GPU");
+          say("Modelo listo (GPU). Elige un video.");
+        } catch {
+          landmarker = await make("CPU");
+          say("Modelo listo (CPU, más lento). Elige un video.");
+        }
+      } catch (err) {
+        say("No se pudo cargar el modelo: " + err.message, true);
+      }
+
+      const video = $("#video");
+      const frameCv = $("#frame");
+      const overlayCv = $("#overlay");
+
+      $("#file").addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        if (file) loadVideo(file.name, URL.createObjectURL(file));
+      });
+      // Video de ejemplo si el servidor lo tiene.
+      fetch("/sample.mp4", { method: "HEAD" }).then((r) => {
+        if (r.ok) {
+          const b = $("#sample");
+          b.hidden = false;
+          b.onclick = () => loadVideo("sample.mp4", "/sample.mp4");
+        }
+      });
+
+      function loadVideo(name, src) {
+        video.src = src;
+        video.onloadedmetadata = () => {
+          $("#run").disabled = false;
+          $("#export").disabled = true;
+          $("#bar").style.width = "0";
+          say(`${name} · ${video.duration.toFixed(1)} s · ${video.videoWidth}×${video.videoHeight}. Listo para analizar.`);
+          sizeCanvases();
+          drawPoster();
+        };
+      }
+
+      function sizeCanvases() {
+        const w = video.videoWidth, h = video.videoHeight;
+        frameCv.width = w; frameCv.height = h;
+        overlayCv.width = w; overlayCv.height = h;
+        $("#frameWrap").style.aspectRatio = `${w} / ${h}`;
+      }
+
+      function drawPoster() {
+        const ctx = frameCv.getContext("2d");
+        ctx.drawImage(video, 0, 0);
+      }
+
+      function drawOverlay(lm) {
+        const ctx = overlayCv.getContext("2d");
+        ctx.clearRect(0, 0, overlayCv.width, overlayCv.height);
+        if (!lm) return;
+        ctx.strokeStyle = "rgba(37,76,62,0.9)";
+        ctx.lineWidth = Math.max(2, overlayCv.width / 160);
+        for (const [a, b] of PAIRS) {
+          if (!lm[a] || !lm[b]) continue;
+          if ((lm[a].visibility ?? 1) < 0.4 || (lm[b].visibility ?? 1) < 0.4) continue;
+          ctx.beginPath();
+          ctx.moveTo(lm[a].x * overlayCv.width, lm[a].y * overlayCv.height);
+          ctx.lineTo(lm[b].x * overlayCv.width, lm[b].y * overlayCv.height);
+          ctx.stroke();
+        }
+        ctx.fillStyle = "#e2574c";
+        for (const p of lm) {
+          if ((p.visibility ?? 1) < 0.4) continue;
+          ctx.beginPath();
+          ctx.arc(p.x * overlayCv.width, p.y * overlayCv.height, Math.max(3, overlayCv.width / 200), 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      const deg = (rad) => (rad * 180) / Math.PI;
+      function angleDeg(a, b, c) {
+        const v1 = [a.x - b.x, a.y - b.y];
+        const v2 = [c.x - b.x, c.y - b.y];
+        const dot = v1[0] * v2[0] + v1[1] * v2[1];
+        const m = Math.hypot(v1[0], v1[1]) * Math.hypot(v2[0], v2[1]);
+        return m === 0 ? 180 : deg(Math.acos(Math.min(1, Math.max(-1, dot / m))));
+      }
+
+      const smooth = (xs, w = 5) =>
+        xs.map((_, i) => {
+          let s = 0, n = 0;
+          for (let j = Math.max(0, i - w); j <= Math.min(xs.length - 1, i + w); j++) { s += xs[j]; n++; }
+          return s / n;
+        });
+
+      // Segmentación de avance: umbral de extensión/flexión sobre el rango observado.
+      function countRepsPreview(times, angles) {
+        if (angles.length < 8) return [];
+        const lo = Math.min(...angles), hi = Math.max(...angles);
+        const range = hi - lo;
+        if (range < 12) return [];
+        const ext = hi - range * 0.3;
+        const flex = lo + range * 0.3;
+        const reps = [];
+        let phase = "top", bottomT = null, topT = times[0];
+        for (let i = 1; i < angles.length; i++) {
+          const a = angles[i], t = times[i];
+          if (phase === "top" && a < flex) { phase = "bottom"; bottomT = t; }
+          else if (phase === "bottom" && a > ext && bottomT !== null && t - topT > 1) {
+            reps.push({ topT, bottomT, endT: t });
+            phase = "top"; topT = t;
+          }
+        }
+        return reps;
+      }
+
+      function drawAngleChart(times, angles, reps) {
+        const cv = $("#angle"), ctx = cv.getContext("2d");
+        ctx.clearRect(0, 0, cv.width, cv.height);
+        if (!times.length) return;
+        const pad = 30, W = cv.width - pad * 2, H = cv.height - pad * 2;
+        const lo = Math.min(...angles) - 5, hi = Math.max(...angles) + 5;
+        const X = (t) => pad + (t / times[times.length - 1]) * W;
+        const Y = (a) => pad + (1 - (a - lo) / (hi - lo)) * H;
+        ctx.strokeStyle = "#d7e2db"; ctx.fillStyle = "#5f6f67"; ctx.font = "16px system-ui";
+        ctx.strokeRect(pad, pad, W, H);
+        ctx.fillText("Ángulo de rodilla (°)", pad + 6, pad + 20);
+        ctx.fillText(Math.round(hi), 2, pad + 6);
+        ctx.fillText(Math.round(lo), 2, cv.height - pad + 6);
+        for (const r of reps) {
+          ctx.fillStyle = "rgba(226,87,76,0.12)";
+          ctx.fillRect(X(r.topT), pad, X(r.endT) - X(r.topT), H);
+        }
+        ctx.strokeStyle = "#254c3e"; ctx.lineWidth = 2.5; ctx.beginPath();
+        times.forEach((t, i) => (i ? ctx.lineTo(X(t), Y(angles[i])) : ctx.moveTo(X(t), Y(angles[i]))));
+        ctx.stroke();
+      }
+
+      function drawBarPath(frames) {
+        const cv = $("#barpath"), ctx = cv.getContext("2d");
+        ctx.clearRect(0, 0, cv.width, cv.height);
+        const pts = [];
+        for (const f of frames) {
+          if (!f.lm) continue;
+          const lw = f.lm[L.lWrist], rw = f.lm[L.rWrist];
+          if (!lw || !rw) continue;
+          if ((lw.visibility ?? 1) < 0.4 || (rw.visibility ?? 1) < 0.4) continue;
+          pts.push([(lw.x + rw.x) / 2, (lw.y + rw.y) / 2]);
+        }
+        ctx.fillStyle = "#5f6f67"; ctx.font = "16px system-ui";
+        ctx.fillText("Recorrido de la barra (muñecas)", 36, 26);
+        if (pts.length < 2) return;
+        const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+        const pad = 34, W = cv.width - pad * 2, H = cv.height - pad * 2;
+        const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+        const spanX = Math.max(x1 - x0, 0.01), spanY = Math.max(y1 - y0, 0.01);
+        const scale = Math.min(W / spanX, H / spanY);
+        const X = (x) => pad + (x - x0) * scale + (W - spanX * scale) / 2;
+        const Y = (y) => pad + (y - y0) * scale + (H - spanY * scale) / 2;
+        ctx.strokeStyle = "rgba(37,76,62,0.25)"; ctx.lineWidth = 1;
+        ctx.beginPath();
+        pts.forEach((p, i) => (i ? ctx.lineTo(X(p[0]), Y(p[1])) : ctx.moveTo(X(p[0]), Y(p[1]))));
+        ctx.stroke();
+        ctx.fillStyle = "#e2574c";
+        for (const p of [pts[0], pts[pts.length - 1]]) {
+          ctx.beginPath(); ctx.arc(X(p[0]), Y(p[1]), 5, 0, Math.PI * 2); ctx.fill();
+        }
+        const drift = (x1 - x0) / ((y1 - y0) || 1);
+        ctx.fillStyle = "#1f2d27";
+        ctx.fillText(`Deriva horizontal ≈ ${(drift * 100).toFixed(0)}% del recorrido vertical`, pad, cv.height - 8);
+      }
+
+      // Buscar un instante y esperar datos decodificados: "seeked" puede dispararse
+      // antes de que el fotograma esté disponible si el video aún no tiene búfer.
+      async function seek(video, t) {
+        const target = Math.min(t, video.duration - 0.001);
+        if (video.readyState < 2) {
+          await new Promise((resolve) => {
+            const ok = () =>
+              video.readyState >= 2 ? resolve() : video.addEventListener("canplay", ok, { once: true });
+            ok();
+            setTimeout(resolve, 2000);
+          });
+        }
+        await new Promise((resolve) => {
+          let settled = false;
+          const done = () => {
+            if (settled) return;
+            settled = true;
+            video.removeEventListener("seeked", done);
+            clearTimeout(timer);
+            resolve();
+          };
+          const timer = setTimeout(done, 1500);
+          video.addEventListener("seeked", done);
+          video.currentTime = target;
+        });
+      }
+
+      $("#cancel").addEventListener("click", () => (cancelFlag = true));
+
+      $("#run").addEventListener("click", async () => {
+        if (!landmarker || !video.duration) return;
+        if (video.readyState < 2) {
+          say("Cargando el video…");
+          await new Promise((r) => {
+            video.addEventListener("canplay", r, { once: true });
+            setTimeout(r, 6000);
+          });
+        }
+        cancelFlag = false;
+        $("#run").disabled = true;
+        $("#cancel").disabled = false;
+        $("#export").disabled = true;
+
+        const hz = Number($("#hz").value);
+        const step = 1 / hz;
+        const frames = [];
+        const t0 = performance.now();
+        let lastTs = 0;
+
+        for (let t = 0; t < video.duration && !cancelFlag; t += step) {
+          await seek(video, t);
+          const ts = Math.max(lastTs + 1, Math.round(t * 1000));
+          lastTs = ts;
+          let lm = null;
+          try {
+            const res = landmarker.detectForVideo(video, ts);
+            lm = res.landmarks && res.landmarks[0] ? res.landmarks[0] : null;
+          } catch (err) {
+            say("Error en un fotograma: " + err.message, true);
+          }
+          frames.push({ t: Number(t.toFixed(3)), lm });
+          drawOverlay(lm);
+          drawPoster();
+          $("#bar").style.width = `${Math.min(100, (t / video.duration) * 100).toFixed(1)}%`;
+        }
+
+        const elapsed = (performance.now() - t0) / 1000;
+        $("#cancel").disabled = true;
+        $("#run").disabled = false;
+
+        // Elegir lado (izquierdo/derecho) por visibilidad media.
+        const sideVis = (idx) =>
+          frames.reduce((s, f) => s + (f.lm && f.lm[idx] ? f.lm[idx].visibility ?? 1 : 0), 0);
+        const leftScore = sideVis(L.lHip) + sideVis(L.lKnee) + sideVis(L.lAnkle);
+        const rightScore = sideVis(L.rHip) + sideVis(L.rKnee) + sideVis(L.rAnkle);
+        const [hip, knee, ankle] =
+          leftScore >= rightScore ? [L.lHip, L.lKnee, L.lAnkle] : [L.rHip, L.rKnee, L.rAnkle];
+
+        const times = frames.map((f) => f.t);
+        const raw = frames.map((f) => (f.lm && f.lm[hip] && f.lm[knee] && f.lm[ankle] ? angleDeg(f.lm[hip], f.lm[knee], f.lm[ankle]) : null));
+        const vis = frames.map((f) => (f.lm ? (f.lm[hip].visibility ?? 1) + (f.lm[knee].visibility ?? 1) + (f.lm[ankle].visibility ?? 1) : 0) / 3);
+
+        // Rellenar huecos breves por interpolación para la curva de avance.
+        const angles = smooth(raw.map((a, i) => (a === null ? (raw[i - 1] ?? raw[i + 1] ?? 170) : a)));
+
+        const reps = countRepsPreview(times, angles);
+        const tempos = reps.map((r) => ({
+          ecc: r.bottomT - r.topT,
+          con: r.endT - r.bottomT,
+        }));
+        const avg = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
+
+        $("#stFrames").textContent = `${frames.length} (${hz} fps efectivos)`;
+        $("#stTime").textContent = `${elapsed.toFixed(1)} s`;
+        $("#stVis").textContent = `${(avg(vis) * 100).toFixed(0)}%`;
+        $("#stReps").textContent = String(reps.length);
+        $("#stTempo").textContent = tempos.length
+          ? `${avg(tempos.map((x) => x.ecc)).toFixed(2)} s / ${avg(tempos.map((x) => x.con)).toFixed(2)} s`
+          : "–";
+        $("#debug").textContent =
+          `Lado: ${leftScore >= rightScore ? "izquierdo" : "derecho"} (índices ${hip}, ${knee}, ${ankle}). ` +
+          `Ángulo: min ${Math.round(Math.min(...angles))}°, max ${Math.round(Math.max(...angles))}°.`;
+
+        drawAngleChart(times, angles, reps);
+        drawBarPath(frames);
+
+        fixture = {
+          meta: { exercise: "squat-lateral", sampleHz: hz, side: leftScore >= rightScore ? "left" : "right", durationS: Number(video.duration.toFixed(2)) },
+          frames: frames.map((f, i) => ({
+            t: f.t,
+            lm: f.lm
+              ? f.lm.map((p) => [
+                  Number(p.x.toFixed(5)),
+                  Number(p.y.toFixed(5)),
+                  Number(p.z.toFixed(5)),
+                  Number((p.visibility ?? 1).toFixed(3)),
+                ])
+              : null,
+            angle: Number(angles[i].toFixed(2)),
+          })),
+        };
+        $("#export").disabled = false;
+        window.__pulsoFixture = fixture;
+        say(cancelFlag ? "Cancelado." : `Análisis listo en ${elapsed.toFixed(1)} s. Revisa el esqueleto, la curva y el conteo.`);
+      });
+
+      $("#export").addEventListener("click", () => {
+        if (!fixture) return;
+        const blob = new Blob([JSON.stringify(fixture)], { type: "application/json" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `pulso-fixture-${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      });
+    </script>
+  </body>
+</html>

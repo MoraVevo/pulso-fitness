@@ -30,6 +30,8 @@ import {
 } from "./exercises.js";
 import { muscleRegions, exerciseRegions } from "./muscle-regions.js";
 import { cardioActivities, cardioActivity, estimateCardioKcal, cardioWeightForDate, cardioTotals, dailyEnergy, validCardioRecord } from "./cardio.js";
+import { analyzeVideoFile, loadVideoAnalyzer } from "./video-analyzer.js";
+import { toVideoAnalysis } from "./kinematics.js";
 
 import {
   movementGroups,
@@ -166,6 +168,7 @@ const defaults = () => ({
   entries: [],
   sessions: [],
   cardio: [],
+  videoAnalyses: [],
   weights: [],
   favorites: [],
   customFoods: [],
@@ -582,7 +585,7 @@ function trainingPage() {
     tab === "volume"
       ? patternOverview() + muscleOverview()
       : tab === "session"
-        ? `<div class="grid-2 workout-grid"><article class="card">${session ? sessionEditor(session) : empty("Tu próxima sesión empieza aquí.", "Elige una rutina o crea una sesión con tus ejercicios.", "new-session", "Crear sesión", "dumbbell")}${dayCardioSection()}</article><div>${muscleVolumeCard()}<article class="card spacer-top"><h3>Entrena con contexto</h3><p class="help-text" style="margin-top:13px">El RIR registra cuántas repeticiones crees que podrías haber hecho al terminar una serie. 0 = ninguna más. Si lo dejas vacío, se cuenta como 0 (al fallo).</p><p class="help-text" style="margin-top:10px">Toca Carga, Reps o RIR para abrir la rueda y desliza hasta el valor. Una serie queda hecha al elegir las repeticiones. El volumen suma carga × repeticiones de las series registradas. En ejercicios con peso corporal registra solo la carga añadida.</p><p class="help-text" style="margin-top:10px">Cada ejercicio puede sumar series directas e indirectas a distintos músculos. Puedes editar esa distribución con el botón de músculos de cada ejercicio.</p></article></div></div>`
+        ? `<div class="grid-2 workout-grid"><article class="card">${session ? sessionEditor(session) : empty("Tu próxima sesión empieza aquí.", "Elige una rutina o crea una sesión con tus ejercicios.", "new-session", "Crear sesión", "dumbbell")}${dayCardioSection()}${dayVideoSection()}</article><div>${muscleVolumeCard()}<article class="card spacer-top"><h3>Entrena con contexto</h3><p class="help-text" style="margin-top:13px">El RIR registra cuántas repeticiones crees que podrías haber hecho al terminar una serie. 0 = ninguna más. Si lo dejas vacío, se cuenta como 0 (al fallo).</p><p class="help-text" style="margin-top:10px">Toca Carga, Reps o RIR para abrir la rueda y desliza hasta el valor. Una serie queda hecha al elegir las repeticiones. El volumen suma carga × repeticiones de las series registradas. En ejercicios con peso corporal registra solo la carga añadida.</p><p class="help-text" style="margin-top:10px">Cada ejercicio puede sumar series directas e indirectas a distintos músculos. Puedes editar esa distribución con el botón de músculos de cada ejercicio.</p></article></div></div>`
         : tab === "routines"
           ? routinesPage()
           : historyPage()
@@ -690,6 +693,208 @@ function cardioModal(entry) {
     currentSessionId = null;
     closeModal();
     save("Cardio guardado. Objetivo de alimentación actualizado.");
+  });
+}
+
+// ===== Análisis por video =====
+
+let videoCancel = false;
+
+const velLabel = (r) =>
+  r.summary.meanConcentricVel == null
+    ? ""
+    : ` · ${fmt(r.summary.meanConcentricVel, 1)} ${r.velocityUnit === "cm" ? "cm/s" : "u/s"} de subida media`;
+
+function squatOptions() {
+  return exerciseCatalog().filter((e) => exerciseMovement({ ...e, exerciseId: e.id }).pattern === "squat");
+}
+
+function dayVideoSection() {
+  const records = (state.videoAnalyses || [])
+    .filter((r) => r.date === selectedDate)
+    .sort((a, b) => b.createdAt - a.createdAt);
+  const rows = records
+    .map((r) => {
+      const ex = exerciseCatalog().find((e) => e.id === r.exerciseId);
+      return `<article class="cardio-entry"><div class="cardio-entry-icon">${icon("spark")}</div><div class="cardio-entry-info"><h3>${esc(ex ? ex.name : r.exerciseId)}</h3><p>ROM media ${fmt(r.summary.avgRomDeg)}° · ${fmt(r.summary.avgEccentricMs / 1000, 1)} s bajar · ${fmt(r.summary.avgConcentricMs / 1000, 1)} s subir</p><span>${velLabel(r)}</span></div><div class="cardio-entry-energy"><strong>${r.summary.repCount}</strong><small>reps</small><div>${iconButton("search", "view-video", "Ver análisis", `data-id="${r.id}"`)}${iconButton("trash", "delete-video", "Eliminar análisis", `data-id="${r.id}"`)}</div></div></article>`;
+    })
+    .join("");
+  return `<div class="exercise-card day-cardio"><div class="exercise-top"><div class="cardio-badge">${icon("spark")}</div><div><h3>Análisis por video</h3><p>${dateLabel(selectedDate, { day: "numeric", month: "long" })} · ${records.length ? `${records.length} ${records.length === 1 ? "serie analizada" : "series analizadas"}` : "una serie por video, de lado"}</p></div>${iconButton("plus", "new-video-analysis", "Analizar un video")}</div>${records.length ? rows : `<p class="help-text" style="margin-top:12px">Carga un video de una serie para contar repeticiones, medir el recorrido y los tiempos de cada fase. El video se procesa en tu navegador y no se guarda.</p>`}<details class="cardio-method"><summary>Cómo interpretar el análisis</summary><p>Las medidas salen de la posición estimada del cuerpo en el video: son referencias de registro, no una evaluación de tu técnica ni un diagnóstico.</p><p>Para un conteo estable: cámara fija de lado, cuerpo completo visible, una sola serie por video de menos de 2 minutos.</p><p>La velocidad usa tu estatura para aproximarse a cm/s; sin estatura registrada se muestran unidades relativas del video.</p></details></div>`;
+}
+
+function videoBarPathSvg(points) {
+  if (!points || points.length < 2) return "";
+  const xs = points.map((p) => p[0]);
+  const ys = points.map((p) => p[1]);
+  const x0 = Math.min(...xs);
+  const x1 = Math.max(...xs);
+  const y0 = Math.min(...ys);
+  const y1 = Math.max(...ys);
+  const w = Math.max(x1 - x0, 0.001);
+  const h = Math.max(y1 - y0, 0.001);
+  const scale = Math.min(84 / w, 114 / h);
+  const px = (x) => 8 + (x - x0) * scale + (84 - w * scale) / 2;
+  const py = (y) => 8 + (y - y0) * scale + (114 - h * scale) / 2;
+  const path = points.map((p, i) => `${i ? "L" : "M"}${px(p[0]).toFixed(1)} ${py(p[1]).toFixed(1)}`).join(" ");
+  const first = points[0];
+  const last = points[points.length - 1];
+  return `<svg class="video-path" viewBox="0 0 100 130" role="img" aria-label="Recorrido de la barra"><path d="${path}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity="0.55"/><circle cx="${px(first[0]).toFixed(1)}" cy="${py(first[1]).toFixed(1)}" r="3.2" fill="var(--green)"/><circle cx="${px(last[0]).toFixed(1)}" cy="${py(last[1]).toFixed(1)}" r="3.2" fill="var(--orange)"/></svg>`;
+}
+
+function videoResultsMarkup(r) {
+  const rows = r.reps
+    .map(
+      (rep, i) =>
+        `<tr><td>${i + 1}</td><td>${fmt(rep.romDeg)}°</td><td>${fmt(rep.eccentricMs / 1000, 1)} s</td><td>${fmt(rep.concentricMs / 1000, 1)} s</td><td>${rep.pauseMs > 150 ? `${fmt(rep.pauseMs / 1000, 1)} s` : "—"}</td></tr>`,
+    )
+    .join("");
+  const session = state.sessions.find((s) => s.date === selectedDate && !s.finished);
+  const register =
+    session && session.exercises.length
+      ? button(`Registrar serie de ${r.summary.repCount} reps`, "record-video-set", "check", "full spacer-top", `data-id="${r.id}"`)
+      : `<p class="help-text spacer-top">Para registrar esta serie como ejercicio, crea una sesión del día.</p>`;
+  return `<div class="video-results"><div class="video-stats"><div><strong>${r.summary.repCount}</strong><span>reps</span></div><div><strong>${fmt(r.summary.avgRomDeg)}°</strong><span>ROM media</span></div><div><strong>${fmt(r.summary.avgEccentricMs / 1000, 1)} s</strong><span>bajar</span></div><div><strong>${fmt(r.summary.avgConcentricMs / 1000, 1)} s</strong><span>subir</span></div><div><strong>${fmt(r.summary.tutMs / 1000)}</strong><span>s bajo tensión</span></div><div><strong>${r.summary.meanConcentricVel != null ? fmt(r.summary.meanConcentricVel, 1) : "—"}</strong><span>${r.velocityUnit === "cm" ? "cm/s al subir" : "u/s al subir"}</span></div></div><div class="video-path-wrap">${videoBarPathSvg(r.barPath.points)}<p class="help-text">Recorrido de la barra${r.summary.barDriftPct != null ? ` · deriva horizontal ${fmt(r.summary.barDriftPct)}% del recorrido vertical` : ""}. Verde: inicio · naranja: fin.</p></div><table class="video-table"><thead><tr><th>#</th><th>ROM</th><th>Bajar</th><th>Subir</th><th>Pausa</th></tr></thead><tbody>${rows}</tbody></table>${r.summary.romConsistencyPct != null ? `<p class="help-text">Consistencia del ROM entre repeticiones: ${fmt(r.summary.romConsistencyPct)}%.</p>` : ""}${register}<p class="help-text">Visibilidad del cuerpo: ${fmt(r.quality.visibilityPct)}% · ${r.quality.framesTracked} de ${r.quality.framesAnalyzed} fotogramas con la pose detectada.</p><p class="help-text">Medidas estimadas desde la posición del cuerpo: no evalúan tu técnica ni sustituyen la guía de un profesional.</p></div>`;
+}
+
+function openVideoResults(id) {
+  const r = (state.videoAnalyses || []).find((x) => x.id === id);
+  if (!r) return;
+  const ex = exerciseCatalog().find((e) => e.id === r.exerciseId);
+  openModal(
+    `${r.summary.repCount} repeticiones detectadas`,
+    `${esc(ex ? ex.name : r.exerciseId)} · ${dateLabel(r.date, { day: "numeric", month: "long" })}`,
+    videoResultsMarkup(r),
+  );
+}
+
+function videoChooseMarkup() {
+  const options = squatOptions()
+    .map((e) => `<option value="${e.id}">${esc(e.name)}</option>`)
+    .join("");
+  return `<div class="video-choose"><div class="field wide"><label for="video-exercise">Ejercicio de la serie</label><select id="video-exercise">${options}</select></div><label class="video-file" for="video-file">${icon("upload")}<span>Elegir el video de la serie</span><small>MP4 o WebM · cámara de lado · cuerpo completo · menos de 2 minutos</small></label><input id="video-file" type="file" accept="video/mp4,video/webm,video/*" class="hide"><button class="btn primary full" id="video-start" data-action="start-video" disabled>${icon("spark")}Analizar video</button><p id="video-model-status" class="help-text">Cargando el modelo de pose (~20 MB, solo la primera vez)…</p><p class="help-text">Todo se procesa en tu navegador: el video no se sube ni se guarda. Solo se conservan las medidas.</p></div>`;
+}
+
+function bindVideoChoose() {
+  loadVideoAnalyzer()
+    .then(() => {
+      const status = $("#video-model-status");
+      if (status) status.textContent = "Modelo listo.";
+    })
+    .catch(() => {
+      const status = $("#video-model-status");
+      if (status) status.textContent = "No se pudo cargar el modelo en este navegador.";
+    });
+  $("#video-file").addEventListener("change", () => {
+    $("#video-start").disabled = !$("#video-file").files[0];
+  });
+}
+
+function videoModal() {
+  openModal(
+    "Analizar un video",
+    "Reps, recorrido y tiempos desde una serie grabada de lado.",
+    videoChooseMarkup(),
+  );
+  bindVideoChoose();
+}
+
+async function runVideoAnalysis(file, exerciseId) {
+  videoCancel = false;
+  openModal(
+    "Analizando el video",
+    "Los fotogramas se procesan en tu dispositivo.",
+    `<div class="video-processing"><div class="video-progress" role="progressbar" aria-label="Progreso del análisis"><i id="video-progress-bar"></i></div><p class="help-text">Puede tardar entre unos segundos y un minuto según el video.</p>${button("Cancelar", "cancel-video", "x", "full")}</div>`,
+    { dismissible: false },
+  );
+  modalCleanup = () => {
+    videoCancel = true;
+  };
+  try {
+    const analysis = await analyzeVideoFile(file, {
+      onProgress: (p) => {
+        const bar = $("#video-progress-bar");
+        if (bar) bar.style.width = `${Math.round(p * 100)}%`;
+      },
+      shouldCancel: () => videoCancel,
+      estaturaCm: state.profile?.height ?? null,
+    });
+    if (!analysis.summary.repCount) {
+      modalCleanup = () => {};
+      openModal(
+        "Sin repeticiones claras",
+        "No se detectaron repeticiones completas en este video.",
+        `<p class="help-text">Visibilidad del cuerpo: ${fmt(analysis.quality.visibilityPct)}%. Prueba con la cámara fija de lado, el cuerpo completo en cuadro y una serie completa de pie a sentadilla.</p>${button("Elegir otro video", "new-video-analysis", "upload", "full spacer-top")}`,
+      );
+      return;
+    }
+    const record = toVideoAnalysis(analysis, {
+      id: uid(),
+      date: selectedDate,
+      exerciseId,
+      createdAt: Date.now(),
+    });
+    state.videoAnalyses = [...(state.videoAnalyses || []), record];
+    save();
+    openVideoResults(record.id);
+    toast("Análisis guardado.");
+  } catch (err) {
+    if (err && err.message === "cancel") {
+      closeModal();
+      return;
+    }
+    modalCleanup = () => {};
+    const long = err && err.message === "long";
+    const motivo =
+      long || (err && (err.message === "video" || err.message === "duration"))
+        ? long
+          ? "Graba una sola serie: con menos de 2 minutos basta."
+          : "Prueba con un video MP4 o WebM guardado en el dispositivo."
+        : `Motivo técnico: ${err?.message || "desconocido"}. Revisa tu conexión la primera vez: el modelo se descarga desde la propia app.`;
+    openModal(
+      long ? "El video es muy largo" : "No se pudo analizar el video",
+      motivo,
+      videoChooseMarkup(),
+    );
+    bindVideoChoose();
+  }
+}
+
+function videoSetModal(record) {
+  const session = state.sessions.find((s) => s.date === selectedDate && !s.finished);
+  if (!session || !session.exercises.length) return;
+  const defaultIdx = Math.max(
+    0,
+    session.exercises.findIndex((ex) => exerciseMovement(ex).pattern === "squat"),
+  );
+  openModal(
+    "Registrar la serie detectada",
+    `${record.summary.repCount} repeticiones se registrarán como una serie hecha.`,
+    `<form id="video-set-form"><div class="form-grid"><div class="field wide"><label for="video-set-exercise">Ejercicio de la sesión</label><select id="video-set-exercise">${session.exercises
+      .map(
+        (ex, i) =>
+          `<option value="${i}" ${i === defaultIdx ? "selected" : ""}>${esc(ex.name)} · ${ex.sets.filter((st) => st.done).length} series hechas</option>`,
+      )
+      .join("")}</select></div><div class="field wide"><label for="video-set-load">Carga · kg</label><input id="video-set-load" name="kg" type="number" inputmode="decimal" min="0" max="1000" step="0.5"><small>Puedes ajustarla después tocando Carga en la serie.</small></div></div><button type="submit" class="btn primary full">${icon("check")}Registrar serie</button></form>`,
+  );
+  const select = $("#video-set-exercise");
+  const loadInput = $("#video-set-load");
+  function suggest() {
+    const ex = session.exercises[+select.value];
+    const s = exerciseLoadSuggestion(state.sessions, ex.exerciseId, selectedDate, ex.equipment);
+    loadInput.value = s.kg ? s.kg : "";
+    loadInput.placeholder = s.kg ? `Sugerido: ${s.kg} kg` : "0 = peso corporal";
+  }
+  suggest();
+  select.addEventListener("change", suggest);
+  $("#video-set-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const ei = +select.value;
+    const ex = session.exercises[ei];
+    const kg = loadInput.value === "" ? 0 : +loadInput.value;
+    ex.sets.push(pendingSet({ kg, unit: ex.sets.at(-1)?.unit || "kg", reps: "", rir: "" }));
+    recordSetReps(state, session.id, ei, ex.sets.length - 1, record.summary.repCount);
+    closeModal();
+    save(`Serie registrada: ${record.summary.repCount} reps de ${ex.name}.`);
   });
 }
 
@@ -1064,6 +1269,14 @@ function exerciseProgressCard() {
     )
     .join("")}</select></div><div id="exercise-progress" class="spacer-top">${current ? exerciseProgress(current) : empty("Sin ejercicios de este patrón.", "Crea o elige otro patrón para ver su progreso por ejercicio.")}</div></article>`;
 }
+function exerciseVideoSummary(id) {
+  const records = (state.videoAnalyses || []).filter((r) => r.exerciseId === id);
+  if (!records.length) return "";
+  const last = [...records].sort((a, b) => b.createdAt - a.createdAt)[0];
+  const count = records.length;
+  return `<div class="info-box"><strong>Último análisis por video</strong> (${dateLabel(last.date, { day: "numeric", month: "short" })} · ${count} ${count === 1 ? "análisis registrado" : "análisis registrados"}): ${last.summary.repCount} reps · ROM media ${fmt(last.summary.avgRomDeg)}° · ${fmt(last.summary.avgEccentricMs / 1000, 1)} s bajar / ${fmt(last.summary.avgConcentricMs / 1000, 1)} s subir${velLabel(last)}. Son medidas estimadas de registro, no una evaluación de técnica.</div>`;
+}
+
 function exerciseProgress(id) {
   const rows = state.sessions
     .filter((s) => s.finished && s.date <= selectedDate)
@@ -1082,11 +1295,14 @@ function exerciseProgress(id) {
       };
     })
     .filter((r) => r.sets.length);
-  if (!rows.length)
+  if (!rows.length) {
+    const video = exerciseVideoSummary(id);
+    if (video) return video + empty("Todavía no hay series para comparar.", "Completa una sesión con este ejercicio.");
     return empty(
       "Todavía no hay series para comparar.",
       "Completa una sesión con este ejercicio.",
     );
+  }
   let running = -Infinity;
   for (const r of rows) {
     r.pr = r.e1 != null && r.e1 > running;
@@ -1104,7 +1320,7 @@ function exerciseProgress(id) {
   const best8 = recent.length ? Math.max(...recent.map((r) => r.e1)) : null;
   const prev8 = prior.length ? Math.max(...prior.map((r) => r.e1)) : null;
   const delta8 = best8 != null && prev8 ? ((best8 - prev8) / prev8) * 100 : null;
-  return `<p class="help-text">Mejor e1RM de las últimas 8 semanas: <b>${best8 != null ? `${fmt(best8, 1)} kg` : "—"}</b> ${trendBadge(delta8)}</p><div class="weight-log">${rows
+  return `${exerciseVideoSummary(id)}<p class="help-text">Mejor e1RM de las últimas 8 semanas: <b>${best8 != null ? `${fmt(best8, 1)} kg` : "—"}</b> ${trendBadge(delta8)}</p><div class="weight-log">${rows
     .map((r, i) => {
       const best = r.sets.reduce((a, b) =>
         b.kg > a.kg || (b.kg === a.kg && b.reps > a.reps) ? b : a,
@@ -2085,7 +2301,7 @@ async function importFile(e) {
     if (!validState(data)) throw Error("invalid");
     confirmModal(
       "Importar tu copia de seguridad",
-      `La copia contiene ${data.entries.length} alimentos registrados, ${data.sessions.length} sesiones de fuerza, ${data.cardio?.length || 0} registros de cardio y ${data.weights.length} registros de peso. Sustituirá tus datos actuales. Exporta una copia antes si quieres conservarlos.`,
+      `La copia contiene ${data.entries.length} alimentos registrados, ${data.sessions.length} sesiones de fuerza, ${data.cardio?.length || 0} registros de cardio, ${data.videoAnalyses?.length || 0} análisis de video y ${data.weights.length} registros de peso. Sustituirá tus datos actuales. Exporta una copia antes si quieres conservarlos.`,
       () => {
         state = data;
         currentSessionId = null;
@@ -2197,6 +2413,33 @@ document.addEventListener("click", (e) => {
       render();
       window.scrollTo({ top: 0, behavior: "instant" });
       break;
+    case "new-video-analysis":
+      videoModal();
+      break;
+    case "start-video": {
+      const file = $("#video-file")?.files[0];
+      if (file) runVideoAnalysis(file, $("#video-exercise").value);
+      break;
+    }
+    case "cancel-video":
+      videoCancel = true;
+      break;
+    case "view-video":
+      openVideoResults(d.id);
+      break;
+    case "delete-video":
+      confirmModal("Eliminar análisis", "Se eliminará este análisis de video y sus medidas.", () => {
+        state.videoAnalyses = (state.videoAnalyses || []).filter((r) => r.id !== d.id);
+        save("Análisis eliminado.");
+      }, "Eliminar análisis");
+      break;
+    case "record-video-set": {
+      const record = (state.videoAnalyses || []).find((r) => r.id === d.id);
+      const openSession = state.sessions.find((s) => s.date === selectedDate && !s.finished);
+      if (record && openSession && openSession.exercises.length) videoSetModal(record);
+      else toast("Crea una sesión del día para registrar la serie.");
+      break;
+    }
     case "stop-rest-timer":
       state.restTimer = null;
       save();

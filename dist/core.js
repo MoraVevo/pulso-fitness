@@ -1,6 +1,7 @@
 import { exerciseMuscles, muscleNames } from "./exercises.js";
 import { exerciseRegions, validMuscleRegions } from "./muscle-regions.js";
 import { validCardioRecord } from "./cardio.js";
+import { validVideoAnalysis } from "./kinematics.js";
 
 export const sum = (items, fn) => items.reduce((n, item) => n + fn(item), 0);
 export function localDate(date = new Date()) {
@@ -487,6 +488,9 @@ export function validState(s) {
       (s.cardio === undefined ||
         (array(s.cardio, (r) => r && id(r.id) && date(r.date) && validCardioRecord(r), 10000) &&
           new Set(s.cardio.map((r) => r.id)).size === s.cardio.length)) &&
+      (s.videoAnalyses === undefined ||
+        (array(s.videoAnalyses, (r) => r && id(r.id) && date(r.date) && validVideoAnalysis(r), 1000) &&
+          new Set(s.videoAnalyses.map((r) => r.id)).size === s.videoAnalyses.length)) &&
       array(
         s.sessions,
         (w) =>

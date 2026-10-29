@@ -27,6 +27,7 @@ npm run check
 - Series, carga, repeticiones, RIR, sensación, historial y progreso por ejercicio.
 - Cardio por actividad, ritmo y minutos: caminata, caminadora, trote/carrera, bicicleta, bicicleta estática, elíptica, remo, escaladora, cuerda y otros. Registro, edición e historial desde el celular; kcal activas estimadas o introducidas desde un reloj o máquina.
 - Series directas e indirectas por músculo, con desglose de los ejercicios que contribuyen. Un mismo ejercicio puede tener varios músculos directos y secundarios, editables en cada sesión.
+- Análisis de sentadilla por video: carga una serie grabada de lado y obtén repeticiones detectadas, ROM por repetición, tiempos de fase excéntrica y concéntrica, recorrido de la barra y velocidad aproximada de subida. Todo se procesa en el navegador; el video no se sube ni se guarda.
 - Ventanas de **últimos 7 días móviles** (fecha del diario y los 6 días anteriores) y **semana calendario** (lunes hasta la fecha del diario). No se incluyen registros posteriores a la fecha elegida.
 - Volumen con carga calculado como kg × repeticiones de las series completadas. Las series globales se cuentan una sola vez, aunque participen en varios músculos.
 - Configuración inicial con edad, estatura, peso, sexo para la ecuación, actividad diaria y objetivo; propone calorías y macros iniciales editables.
@@ -53,6 +54,14 @@ Cada grupo se despliega para consultar sus músculos o porciones y los ejercicio
 `dist/muscle-regions.js` contiene la clasificación orientativa por ejercicio. Se registran participaciones, sin porcentajes de activación ni reparto ficticio de series entre porciones. La referencia general es la biblioteca de ACE; para espalda, véase también su [comparación de ejercicios](https://www.acefitness.org/continuing-education/certified/april-2018/6959/ace-sponsored-research-what-is-the-best-back-exercise/), y para hombros, la [revisión de activación de las tres porciones del deltoides](https://pubmed.ncbi.nlm.nih.gov/39593452/). La activación no constituye una medición de hipertrofia ni de recuperación individual.
 
 El botón de músculos de cada ejercicio permite ajustar el detalle en esa sesión. Las asignaciones se conservan en el campo opcional `muscleRegions`, también al guardar rutinas, repetir sesiones y exportar/importar copias. Los registros antiguos del catálogo recuperan una asignación orientativa por ID respetando los grupos editados; los personalizados y grupos sin asignación concreta aparecen como «Sin especificar». No se infiere una porción a partir del nombre libre del ejercicio.
+
+## Análisis por video
+
+El apartado **Entrenamiento → Análisis por video** acepta el video de una serie de sentadilla grabada con la cámara fija de lado, cuerpo completo en cuadro. La app procesa los fotogramas en el navegador con [MediaPipe Pose Landmarker](https://developers.google.com/mediapipe) (Apache 2.0, servido desde la propia aplicación: ~20 MB de modelos la primera vez) y estima repeticiones, ROM por repetición, tiempos de bajada y subida, pausa en el fondo, recorrido de la barra y velocidad media de subida.
+
+Estas medidas son estimaciones de registro a partir de la posición detectada del cuerpo: no evalúan la técnica, no detectan la carga (regístrala tú en la serie) y no constituyen un diagnóstico ni sustituyen la guía de un profesional. El conteo puede fallar con oclusiones, ropa holgada, cambios de cámara o encuadres parciales; la visibilidad del cuerpo se muestra con cada análisis.
+
+El video elegido nunca sale del dispositivo: se decodifica localmente y no se guarda. Solo se conservan las medidas compactas en el campo opcional `videoAnalyses`, incluido en las copias JSON con validación; las copias anteriores que no lo contienen siguen funcionando. La velocidad en cm/s usa la estatura del perfil como referencia de escala; sin estatura se muestran unidades relativas del video.
 
 ## Datos y límites
 
@@ -87,6 +96,10 @@ Las medias nutricionales omiten días sin registros y pueden incluir días incom
 - `dist/`: aplicación publicable, sin compilación.
 - `dist/core.js`: cálculos puros y validación de copias.
 - `dist/cardio.js`: catálogo con MET de referencia, kcal activas, peso por fecha y objetivo diario con cardio.
+- `dist/kinematics.js`: geometría y segmentación de repeticiones sobre landmarks; funciones puras sin DOM.
+- `dist/video-analyzer.js`: carga diferida de MediaPipe y recorrido de fotogramas del video en el navegador.
+- `dist/vendor/mediapipe/`: paquete vendido de MediaPipe Tasks Vision y el modelo de pose (Apache 2.0).
+- `prototype/`: prototipo aislado con el que se validó el pipeline; su `fixture.json` alimenta los pruebas del motor.
 - `dist/app.js`: interfaz, persistencia y flujos de registro.
 - `dist/exercise-visuals.js`: clasificación de patrones y dibujos SVG por movimiento.
 - `dist/pull-illustrations.js`: ilustraciones vectoriales de los 20 ejercicios de jale.
