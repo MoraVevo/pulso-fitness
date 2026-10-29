@@ -3547,3 +3547,13 @@ dialog:has(.routine-builder) > .modal-header {
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+.video-stage {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  margin: 0 auto 4px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #000;
+  aspect-ratio: 16 / 9;
+}

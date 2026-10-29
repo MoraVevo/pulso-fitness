@@ -30,7 +30,7 @@ import {
 } from "./exercises.js";
 import { muscleRegions, exerciseRegions } from "./muscle-regions.js";
 import { cardioActivities, cardioActivity, estimateCardioKcal, cardioWeightForDate, cardioTotals, dailyEnergy, validCardioRecord } from "./cardio.js";
-import { analyzeVideoFile, loadVideoAnalyzer } from "./video-analyzer.js";
+import { analyzeVideoFile, loadVideoAnalyzer, drawPoseFrame } from "./video-analyzer.js";
 import { toVideoAnalysis } from "./kinematics.js";
 
 import {
@@ -699,6 +699,103 @@ function cardioModal(entry) {
 // ===== Análisis por video =====
 
 let videoCancel = false;
+// Video y fotogramas del último análisis, para volver a verlo con el mapeo.
+// Vive solo en memoria de la sesión: lo persistido siguen siendo las medidas.
+let videoReplay = null;
+let videoReplayLoop = null;
+let videoReplayActive = false;
+
+function stopVideoReplayLoop() {
+  videoReplayActive = false;
+  if (videoReplayLoop?.raf) cancelAnimationFrame(videoReplayLoop.raf);
+  videoReplayLoop = null;
+  if (videoReplay) videoReplay.video.pause();
+}
+
+function mountVideoStage(video, canvas) {
+  const stage = $("#video-stage");
+  if (!stage) return;
+  video.style.cssText =
+    "position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000";
+  canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%";
+  canvas.id = "video-canvas";
+  stage.replaceChildren(video, canvas);
+  const size = () => {
+    if (!video.videoWidth) return;
+    stage.style.aspectRatio = `${video.videoWidth} / ${video.videoHeight}`;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+  };
+  if (video.videoWidth) size();
+  else video.addEventListener("loadedmetadata", size, { once: true });
+}
+
+function nearestFrameIndex(frames, t) {
+  let idx = 0;
+  let lo = 0;
+  let hi = frames.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (frames[mid].t <= t) {
+      idx = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return idx;
+}
+
+function drawVideoReplay() {
+  const canvas = $("#video-canvas");
+  if (!canvas || !videoReplay) return;
+  const frame = videoReplay.frames[nearestFrameIndex(videoReplay.frames, videoReplay.video.currentTime)];
+  drawPoseFrame(
+    canvas.getContext("2d"),
+    frame?.lm || null,
+    videoReplay.trail.slice(0, frame?.barCount || 0),
+  );
+}
+
+function setReplayLabel(text) {
+  const label = $("#video-replay-label");
+  if (label) label.textContent = text;
+}
+
+function startVideoReplay() {
+  if (!videoReplay) return;
+  const stage = $("#video-stage");
+  const canvas = $("#video-canvas");
+  if (!stage || !canvas) return;
+  const { video, overlay, frames } = videoReplay;
+  video.style.cssText =
+    "position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000";
+  overlay.style.cssText = "position:absolute;inset:0;width:100%;height:100%";
+  overlay.width = video.videoWidth;
+  overlay.height = video.videoHeight;
+  stage.replaceChildren(video, overlay);
+  stopVideoReplayLoop();
+  videoReplayActive = true;
+  const loop = () => {
+    if (!videoReplayActive) return;
+    drawVideoReplay();
+    videoReplayLoop = { raf: requestAnimationFrame(loop) };
+  };
+  videoReplayLoop = { raf: requestAnimationFrame(loop) };
+  video.onended = () => {
+    stopVideoReplayLoop();
+    drawVideoReplay();
+    setReplayLabel("Ver de nuevo");
+  };
+  video.currentTime = 0;
+  video.play().catch(() => {});
+  setReplayLabel("Pausar");
+}
+
+function videoStageMarkup() {
+  if (!videoReplay) return "";
+  return `<div class="video-stage" id="video-stage"><canvas id="video-canvas"></canvas></div><button class="btn primary full spacer-top" data-action="replay-video">${icon("arrow")}<span id="video-replay-label">Ver el video con el mapeo</span></button><p class="help-text">Esqueleto detectado y recorrido de la barra (muñecas) dibujados sobre tu video. El video no se guarda: esta vista vive solo durante la sesión.</p>`;
+}
 
 const velLabel = (r) =>
   r.summary.meanConcentricVel == null
@@ -753,7 +850,7 @@ function videoResultsMarkup(r) {
     session && session.exercises.length
       ? button(`Registrar serie de ${r.summary.repCount} reps`, "record-video-set", "check", "full spacer-top", `data-id="${r.id}"`)
       : `<p class="help-text spacer-top">Para registrar esta serie como ejercicio, crea una sesión del día.</p>`;
-  return `<div class="video-results"><div class="video-stats"><div><strong>${r.summary.repCount}</strong><span>reps</span></div><div><strong>${fmt(r.summary.avgRomDeg)}°</strong><span>ROM media</span></div><div><strong>${fmt(r.summary.avgEccentricMs / 1000, 1)} s</strong><span>bajar</span></div><div><strong>${fmt(r.summary.avgConcentricMs / 1000, 1)} s</strong><span>subir</span></div><div><strong>${fmt(r.summary.tutMs / 1000)}</strong><span>s bajo tensión</span></div><div><strong>${r.summary.meanConcentricVel != null ? fmt(r.summary.meanConcentricVel, 1) : "—"}</strong><span>${r.velocityUnit === "cm" ? "cm/s al subir" : "u/s al subir"}</span></div></div><div class="video-path-wrap">${videoBarPathSvg(r.barPath.points)}<p class="help-text">Recorrido de la barra${r.summary.barDriftPct != null ? ` · deriva horizontal ${fmt(r.summary.barDriftPct)}% del recorrido vertical` : ""}. Verde: inicio · naranja: fin.</p></div><table class="video-table"><thead><tr><th>#</th><th>ROM</th><th>Bajar</th><th>Subir</th><th>Pausa</th></tr></thead><tbody>${rows}</tbody></table>${r.summary.romConsistencyPct != null ? `<p class="help-text">Consistencia del ROM entre repeticiones: ${fmt(r.summary.romConsistencyPct)}%.</p>` : ""}${register}<p class="help-text">Visibilidad del cuerpo: ${fmt(r.quality.visibilityPct)}% · ${r.quality.framesTracked} de ${r.quality.framesAnalyzed} fotogramas con la pose detectada.</p><p class="help-text">Medidas estimadas desde la posición del cuerpo: no evalúan tu técnica ni sustituyen la guía de un profesional.</p></div>`;
+  return `<div class="video-results"><div class="video-stats"><div><strong>${r.summary.repCount}</strong><span>reps</span></div><div><strong>${fmt(r.summary.avgRomDeg)}°</strong><span>ROM media</span></div><div><strong>${fmt(r.summary.avgEccentricMs / 1000, 1)} s</strong><span>bajar</span></div><div><strong>${fmt(r.summary.avgConcentricMs / 1000, 1)} s</strong><span>subir</span></div><div><strong>${fmt(r.summary.tutMs / 1000)}</strong><span>s bajo tensión</span></div><div><strong>${r.summary.meanConcentricVel != null ? fmt(r.summary.meanConcentricVel, 1) : "—"}</strong><span>${r.velocityUnit === "cm" ? "cm/s al subir" : "u/s al subir"}</span></div></div>${videoStageMarkup()}<div class="video-path-wrap">${videoBarPathSvg(r.barPath.points)}<p class="help-text">Recorrido completo de la barra${r.summary.barDriftPct != null ? ` · deriva horizontal ${fmt(r.summary.barDriftPct)}% del recorrido vertical` : ""}. Verde: inicio · naranja: fin.</p></div><table class="video-table"><thead><tr><th>#</th><th>ROM</th><th>Bajar</th><th>Subir</th><th>Pausa</th></tr></thead><tbody>${rows}</tbody></table>${r.summary.romConsistencyPct != null ? `<p class="help-text">Consistencia del ROM entre repeticiones: ${fmt(r.summary.romConsistencyPct)}%.</p>` : ""}${register}<p class="help-text">Visibilidad del cuerpo: ${fmt(r.quality.visibilityPct)}% · ${r.quality.framesTracked} de ${r.quality.framesAnalyzed} fotogramas con la pose detectada.</p><p class="help-text">Medidas estimadas desde la posición del cuerpo: no evalúan tu técnica ni sustituyen la guía de un profesional.</p></div>`;
 }
 
 function openVideoResults(id) {
@@ -765,6 +862,12 @@ function openVideoResults(id) {
     `${esc(ex ? ex.name : r.exerciseId)} · ${dateLabel(r.date, { day: "numeric", month: "long" })}`,
     videoResultsMarkup(r),
   );
+  modalCleanup = () => stopVideoReplayLoop();
+  if (videoReplay) {
+    mountVideoStage(videoReplay.video, videoReplay.overlay);
+    videoReplay.video.currentTime = 0;
+    videoReplay.video.addEventListener("seeked", () => drawVideoReplay(), { once: true });
+  }
 }
 
 function videoChooseMarkup() {
@@ -800,31 +903,45 @@ function videoModal() {
 
 async function runVideoAnalysis(file, exerciseId) {
   videoCancel = false;
+  stopVideoReplayLoop();
+  videoReplay?.release();
+  videoReplay = null;
   openModal(
     "Analizando el video",
     "Los fotogramas se procesan en tu dispositivo.",
-    `<div class="video-processing"><div class="video-progress" role="progressbar" aria-label="Progreso del análisis"><i id="video-progress-bar"></i></div><p class="help-text">Puede tardar entre unos segundos y un minuto según el video.</p>${button("Cancelar", "cancel-video", "x", "full")}</div>`,
+    `<div class="video-processing"><div class="video-stage" id="video-stage"><canvas id="video-canvas"></canvas></div><div class="video-progress" role="progressbar" aria-label="Progreso del análisis"><i id="video-progress-bar"></i></div><p class="help-text">Mira cómo se dibuja el mapeo del cuerpo y el recorrido de la barra. Puede tardar hasta un minuto.</p>${button("Cancelar", "cancel-video", "x", "full")}</div>`,
     { dismissible: false },
   );
   modalCleanup = () => {
     videoCancel = true;
   };
   try {
-    const analysis = await analyzeVideoFile(file, {
+    const { analysis, replay } = await analyzeVideoFile(file, {
       onProgress: (p) => {
         const bar = $("#video-progress-bar");
         if (bar) bar.style.width = `${Math.round(p * 100)}%`;
       },
+      onFrame: (lm, trail) => {
+        const canvas = $("#video-canvas");
+        if (canvas) drawPoseFrame(canvas.getContext("2d"), lm, trail);
+      },
       shouldCancel: () => videoCancel,
       estaturaCm: state.profile?.height ?? null,
+      mount: (video, canvas) => mountVideoStage(video, canvas),
     });
+    videoReplay = replay;
     if (!analysis.summary.repCount) {
-      modalCleanup = () => {};
+      modalCleanup = () => stopVideoReplayLoop();
       openModal(
         "Sin repeticiones claras",
         "No se detectaron repeticiones completas en este video.",
-        `<p class="help-text">Visibilidad del cuerpo: ${fmt(analysis.quality.visibilityPct)}%. Prueba con la cámara fija de lado, el cuerpo completo en cuadro y una serie completa de pie a sentadilla.</p>${button("Elegir otro video", "new-video-analysis", "upload", "full spacer-top")}`,
+        `${videoStageMarkup()}<p class="help-text">Visibilidad del cuerpo: ${fmt(analysis.quality.visibilityPct)}%. Revisa el mapeo: si el cuerpo se ve completo y de lado, el conteo mejora. Prueba cámara fija, una serie completa de pie a sentadilla y ropa que no oculte las piernas.</p>${button("Elegir otro video", "new-video-analysis", "upload", "full spacer-top")}`,
       );
+      if (videoReplay) {
+        mountVideoStage(videoReplay.video, videoReplay.overlay);
+        videoReplay.video.currentTime = 0;
+        videoReplay.video.addEventListener("seeked", () => drawVideoReplay(), { once: true });
+      }
       return;
     }
     const record = toVideoAnalysis(analysis, {
@@ -838,6 +955,8 @@ async function runVideoAnalysis(file, exerciseId) {
     openVideoResults(record.id);
     toast("Análisis guardado.");
   } catch (err) {
+    videoReplay?.release();
+    videoReplay = null;
     if (err && err.message === "cancel") {
       closeModal();
       return;
@@ -860,6 +979,7 @@ async function runVideoAnalysis(file, exerciseId) {
 }
 
 function videoSetModal(record) {
+  stopVideoReplayLoop();
   const session = state.sessions.find((s) => s.date === selectedDate && !s.finished);
   if (!session || !session.exercises.length) return;
   const defaultIdx = Math.max(
@@ -2424,6 +2544,18 @@ document.addEventListener("click", (e) => {
     case "cancel-video":
       videoCancel = true;
       break;
+    case "replay-video": {
+      const v = videoReplay?.video;
+      if (!v) break;
+      if (v.paused) startVideoReplay();
+      else {
+        v.pause();
+        stopVideoReplayLoop();
+        drawVideoReplay();
+        setReplayLabel("Continuar");
+      }
+      break;
+    }
     case "view-video":
       openVideoResults(d.id);
       break;

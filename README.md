@@ -59,6 +59,8 @@ El botón de músculos de cada ejercicio permite ajustar el detalle en esa sesi�
 
 El apartado **Entrenamiento → Análisis por video** acepta el video de una serie de sentadilla grabada con la cámara fija de lado, cuerpo completo en cuadro. La app procesa los fotogramas en el navegador con [MediaPipe Pose Landmarker](https://developers.google.com/mediapipe) (Apache 2.0, servido desde la propia aplicación: ~20 MB de modelos la primera vez) y estima repeticiones, ROM por repetición, tiempos de bajada y subida, pausa en el fondo, recorrido de la barra y velocidad media de subida.
 
+Durante el análisis y en los resultados puedes ver el video con el mapeo del cuerpo y el recorrido de la barra (muñecas) dibujados encima; esa vista vive en memoria durante la sesión, no se guarda con el registro.
+
 Estas medidas son estimaciones de registro a partir de la posición detectada del cuerpo: no evalúan la técnica, no detectan la carga (regístrala tú en la serie) y no constituyen un diagnóstico ni sustituyen la guía de un profesional. El conteo puede fallar con oclusiones, ropa holgada, cambios de cámara o encuadres parciales; la visibilidad del cuerpo se muestra con cada análisis.
 
 El video elegido nunca sale del dispositivo: se decodifica localmente y no se guarda. Solo se conservan las medidas compactas en el campo opcional `videoAnalyses`, incluido en las copias JSON con validación; las copias anteriores que no lo contienen siguen funcionando. La velocidad en cm/s usa la estatura del perfil como referencia de escala; sin estatura se muestran unidades relativas del video.
