@@ -802,8 +802,22 @@ const velLabel = (r) =>
     ? ""
     : ` · ${fmt(r.summary.meanConcentricVel, 1)} ${r.velocityUnit === "cm" ? "cm/s" : "u/s"} de subida media`;
 
-function squatOptions() {
-  return exerciseCatalog().filter((e) => exerciseMovement({ ...e, exerciseId: e.id }).pattern === "squat");
+// Grupos de ejercicios que el análisis por video soporta, con su tipo de medición.
+const VIDEO_LIFT_GROUPS = [
+  ["Sentadilla · vista lateral", "squat", ["squat"]],
+  ["Press de banca e inclinado · vista lateral", "bench", ["press", "incline"]],
+];
+
+function videoExerciseOptions() {
+  return VIDEO_LIFT_GROUPS.map(([label, kind, patterns]) => {
+    const opts = exerciseCatalog().filter((e) =>
+      patterns.includes(exerciseMovement({ ...e, exerciseId: e.id }).pattern),
+    );
+    if (!opts.length) return "";
+    return `<optgroup label="${label}">${opts
+      .map((e) => `<option value="${e.id}" data-kind="${kind}">${esc(e.name)}</option>`)
+      .join("")}</optgroup>`;
+  }).join("");
 }
 
 function dayVideoSection() {
@@ -871,10 +885,7 @@ function openVideoResults(id) {
 }
 
 function videoChooseMarkup() {
-  const options = squatOptions()
-    .map((e) => `<option value="${e.id}">${esc(e.name)}</option>`)
-    .join("");
-  return `<div class="video-choose"><div class="field wide"><label for="video-exercise">Ejercicio de la serie</label><select id="video-exercise">${options}</select></div><label class="video-file" for="video-file">${icon("upload")}<span>Elegir el video de la serie</span><small>MP4 o WebM · cámara de lado · cuerpo completo · menos de 2 minutos</small></label><input id="video-file" type="file" accept="video/mp4,video/webm,video/*" class="hide"><button class="btn primary full" id="video-start" data-action="start-video" disabled>${icon("spark")}Analizar video</button><p id="video-model-status" class="help-text">Cargando el modelo de pose (~20 MB, solo la primera vez)…</p><p class="help-text">Todo se procesa en tu navegador: el video no se sube ni se guarda. Solo se conservan las medidas.</p></div>`;
+  return `<div class="video-choose"><div class="field wide"><label for="video-exercise">Ejercicio de la serie</label><select id="video-exercise">${videoExerciseOptions()}</select></div><label class="video-file" for="video-file">${icon("upload")}<span>Elegir el video de la serie</span><small>MP4 o WebM · cámara de lado · cuerpo completo · menos de 2 minutos</small></label><input id="video-file" type="file" accept="video/mp4,video/webm,video/*" class="hide"><button class="btn primary full" id="video-start" data-action="start-video" disabled>${icon("spark")}Analizar video</button><p id="video-model-status" class="help-text">Cargando el modelo de pose (~20 MB, solo la primera vez)…</p><p class="help-text">Todo se procesa en tu navegador: el video no se sube ni se guarda. Solo se conservan las medidas.</p></div>`;
 }
 
 function bindVideoChoose() {
@@ -901,7 +912,7 @@ function videoModal() {
   bindVideoChoose();
 }
 
-async function runVideoAnalysis(file, exerciseId) {
+async function runVideoAnalysis(file, exerciseId, kind = "squat") {
   videoCancel = false;
   stopVideoReplayLoop();
   videoReplay?.release();
@@ -927,6 +938,7 @@ async function runVideoAnalysis(file, exerciseId) {
       },
       shouldCancel: () => videoCancel,
       estaturaCm: state.profile?.height ?? null,
+      kind,
       mount: (video, canvas) => mountVideoStage(video, canvas),
     });
     videoReplay = replay;
@@ -982,10 +994,13 @@ function videoSetModal(record) {
   stopVideoReplayLoop();
   const session = state.sessions.find((s) => s.date === selectedDate && !s.finished);
   if (!session || !session.exercises.length) return;
-  const defaultIdx = Math.max(
-    0,
-    session.exercises.findIndex((ex) => exerciseMovement(ex).pattern === "squat"),
-  );
+  const kindPatterns = record.kind === "bench" ? ["press", "incline"] : ["squat"];
+  let matchIdx = session.exercises.findIndex((ex) => ex.exerciseId === record.exerciseId);
+  if (matchIdx < 0)
+    matchIdx = session.exercises.findIndex((ex) =>
+      kindPatterns.includes(exerciseMovement(ex).pattern),
+    );
+  const defaultIdx = Math.max(0, matchIdx);
   openModal(
     "Registrar la serie detectada",
     `${record.summary.repCount} repeticiones se registrarán como una serie hecha.`,
@@ -2538,7 +2553,10 @@ document.addEventListener("click", (e) => {
       break;
     case "start-video": {
       const file = $("#video-file")?.files[0];
-      if (file) runVideoAnalysis(file, $("#video-exercise").value);
+      const select = $("#video-exercise");
+      if (file && select) {
+        runVideoAnalysis(file, select.value, select.selectedOptions[0]?.dataset.kind || "squat");
+      }
       break;
     }
     case "cancel-video":

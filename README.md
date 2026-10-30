@@ -27,7 +27,7 @@ npm run check
 - Series, carga, repeticiones, RIR, sensación, historial y progreso por ejercicio.
 - Cardio por actividad, ritmo y minutos: caminata, caminadora, trote/carrera, bicicleta, bicicleta estática, elíptica, remo, escaladora, cuerda y otros. Registro, edición e historial desde el celular; kcal activas estimadas o introducidas desde un reloj o máquina.
 - Series directas e indirectas por músculo, con desglose de los ejercicios que contribuyen. Un mismo ejercicio puede tener varios músculos directos y secundarios, editables en cada sesión.
-- Análisis de sentadilla por video: carga una serie grabada de lado y obtén repeticiones detectadas, ROM por repetición, tiempos de fase excéntrica y concéntrica, recorrido de la barra y velocidad aproximada de subida. Todo se procesa en el navegador; el video no se sube ni se guarda.
+- Análisis de series por video para sentadilla (mide la rodilla) y press de banca o inclinado (mide el codo): carga una serie grabada de lado y obtén repeticiones detectadas, ROM por repetición, tiempos de fase excéntrica y concéntrica, recorrido de la barra y velocidad aproximada de subida. Todo se procesa en el navegador; el video no se sube ni se guarda.
 - Ventanas de **últimos 7 días móviles** (fecha del diario y los 6 días anteriores) y **semana calendario** (lunes hasta la fecha del diario). No se incluyen registros posteriores a la fecha elegida.
 - Volumen con carga calculado como kg × repeticiones de las series completadas. Las series globales se cuentan una sola vez, aunque participen en varios músculos.
 - Configuración inicial con edad, estatura, peso, sexo para la ecuación, actividad diaria y objetivo; propone calorías y macros iniciales editables.
@@ -57,7 +57,7 @@ El botón de músculos de cada ejercicio permite ajustar el detalle en esa sesi�
 
 ## Análisis por video
 
-El apartado **Entrenamiento → Análisis por video** acepta el video de una serie de sentadilla grabada con la cámara fija de lado, cuerpo completo en cuadro. La app procesa los fotogramas en el navegador con [MediaPipe Pose Landmarker](https://developers.google.com/mediapipe) (Apache 2.0, servido desde la propia aplicación: ~20 MB de modelos la primera vez) y estima repeticiones, ROM por repetición, tiempos de bajada y subida, pausa en el fondo, recorrido de la barra y velocidad media de subida.
+El apartado **Entrenamiento → Análisis por video** acepta el video de una serie grabada con la cámara fija de lado, cuerpo completo en cuadro. Los grupos soportados son la sentadilla y sus variantes (la repetición se mide con el ángulo de rodilla) y el press de banca, inclinado y sus variantes en máquina o mancuernas (se mide el ángulo de codo). Cada ejercicio elegido indica su grupo. La app procesa los fotogramas en el navegador con [MediaPipe Pose Landmarker](https://developers.google.com/mediapipe) (Apache 2.0, servido desde la propia aplicación: ~20 MB de modelos la primera vez) y estima repeticiones, ROM por repetición, tiempos de bajada y subida, pausa en el fondo, recorrido de la barra y velocidad media de subida.
 
 Durante el análisis y en los resultados puedes ver el video con el mapeo del cuerpo y el recorrido de la barra (muñecas) dibujados encima; esa vista vive en memoria durante la sesión, no se guarda con el registro.
 

@@ -5,13 +5,26 @@
 // muñeca 15/16.
 
 const VIS_THRESHOLD = 0.5;
-const KNEE_SIDES = [
-  { hip: 23, knee: 25, ankle: 27, name: "izquierdo" },
-  { hip: 24, knee: 26, ankle: 28, name: "derecho" },
-];
+// Cadenas articulares por tipo de levantamiento, con índices del modelo de 33
+// puntos de MediaPipe. La repetición se segmenta sobre el ángulo de la cadena:
+// sentadilla mide la rodilla; press mide el codo.
+const LIFT_JOINTS = {
+  squat: {
+    sides: [
+      { chain: [23, 25, 27], name: "izquierdo" },
+      { chain: [24, 26, 28], name: "derecho" },
+    ],
+    scaleRatio: 0.245, // fémur ≈ 24.5% de la estatura
+  },
+  bench: {
+    sides: [
+      { chain: [11, 13, 15], name: "izquierdo" },
+      { chain: [12, 14, 16], name: "derecho" },
+    ],
+    scaleRatio: 0.186, // húmero ≈ 18.6% de la estatura
+  },
+};
 const WRISTS = [15, 16];
-// Longitud femoral aproximada como fracción de la estatura, para convertir
-// unidades normalizadas del video en centímetros.
 const THIGH_HEIGHT_RATIO = 0.245;
 
 export const sum = (items, fn) => items.reduce((n, item) => n + fn(item), 0);
@@ -46,30 +59,30 @@ const visible = (p) => p && (p.visibility === undefined || p.visibility >= VIS_T
 function sideScore(frames, side) {
   return sum(frames, (f) => {
     if (!f.lm) return 0;
-    return [side.hip, side.knee, side.ankle].reduce(
-      (n, i) => n + (f.lm[i] ? f.lm[i].visibility ?? 1 : 0),
-      0,
-    );
+    return side.chain.reduce((n, i) => n + (f.lm[i] ? f.lm[i].visibility ?? 1 : 0), 0);
   });
 }
 
 // Elige el lado con mejor visibilidad agregada y lo devuelve con su nombre.
 export function chooseKneeSide(frames) {
-  const left = sideScore(frames, KNEE_SIDES[0]);
-  const right = sideScore(frames, KNEE_SIDES[1]);
-  return left >= right ? { ...KNEE_SIDES[0] } : { ...KNEE_SIDES[1] };
+  const sides = LIFT_JOINTS.squat.sides;
+  const left = sideScore(frames, sides[0]);
+  const right = sideScore(frames, sides[1]);
+  const side = left >= right ? sides[0] : sides[1];
+  return { ...side, chain: [...side.chain] };
 }
 
-// Serie de ángulos de rodilla por fotograma; null cuando el cuerpo no se ve.
+// Serie de ángulos de la cadena articular por fotograma; null cuando no se ve.
 export function kneeAngles(frames, side = null) {
   const s = side || chooseKneeSide(frames);
   return frames.map((f) => {
     if (!f.lm) return null;
-    const hip = f.lm[s.hip];
-    const knee = f.lm[s.knee];
-    const ankle = f.lm[s.ankle];
-    if (!visible(hip) || !visible(knee) || !visible(ankle)) return null;
-    return jointAngle(hip, knee, ankle);
+    const [a, b, c] = s.chain;
+    const p1 = f.lm[a];
+    const p2 = f.lm[b];
+    const p3 = f.lm[c];
+    if (!visible(p1) || !visible(p2) || !visible(p3)) return null;
+    return jointAngle(p1, p2, p3);
   });
 }
 
@@ -146,22 +159,24 @@ export function interpolateBarPath(points, maxGap = 12) {
   return points.map((_, i) => (xs[i] === null || ys[i] === null ? null : { x: xs[i], y: ys[i] }));
 }
 
-// Convierte unidades normalizadas del video en centímetros usando la longitud
-// femoral observada y la estatura del perfil. Devuelve null si el rastreo es malo
-// o no hay estatura; en ese caso las velocidades quedan en unidades relativas.
-export function scaleFromEstatura(frames, side, estaturaCm) {
+// Convierte unidades normalizadas del video en centímetros usando el segmento
+// proximal observado (fémur o húmero) y la estatura del perfil. Devuelve null si
+// el rastreo es malo o no hay estatura; en ese caso las velocidades quedan en
+// unidades relativas.
+export function scaleFromEstatura(frames, side, estaturaCm, scaleRatio = THIGH_HEIGHT_RATIO) {
   if (!estaturaCm || estaturaCm < 100 || estaturaCm > 250) return null;
-  const thighs = [];
+  const lengths = [];
+  const [a, b] = side.chain;
   for (const f of frames) {
     if (!f.lm) continue;
-    const hip = f.lm[side.hip];
-    const knee = f.lm[side.knee];
-    if (!visible(hip) || !visible(knee)) continue;
-    const d = Math.hypot(hip.x - knee.x, hip.y - knee.y);
-    if (d > 0.02 && d < 1) thighs.push(d);
+    const p1 = f.lm[a];
+    const p2 = f.lm[b];
+    if (!visible(p1) || !visible(p2)) continue;
+    const d = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+    if (d > 0.02 && d < 1) lengths.push(d);
   }
-  if (thighs.length < Math.max(5, frames.length * 0.1)) return null;
-  const cmPerUnit = (THIGH_HEIGHT_RATIO * estaturaCm) / mean(thighs);
+  if (lengths.length < Math.max(5, frames.length * 0.1)) return null;
+  const cmPerUnit = (scaleRatio * estaturaCm) / mean(lengths);
   if (!isFinite(cmPerUnit) || cmPerUnit <= 0) return null;
   return round(cmPerUnit, 2);
 }
@@ -250,8 +265,12 @@ export function downsamplePoints(points, max = 60) {
   return out;
 }
 
-export function analyzeSquat(frames, { estaturaCm = null } = {}) {
-  const side = chooseKneeSide(frames);
+export function analyzeLift(frames, { estaturaCm = null, kind = "squat" } = {}) {
+  const joints = LIFT_JOINTS[kind] || LIFT_JOINTS.squat;
+  const left = sideScore(frames, joints.sides[0]);
+  const right = sideScore(frames, joints.sides[1]);
+  const chosen = left >= right ? joints.sides[0] : joints.sides[1];
+  const side = { ...chosen, chain: [...chosen.chain] };
   const raw = kneeAngles(frames, side);
   const angles = interpolateGaps(smoothSeries(medianFilter(raw), 2), 6);
   const times = frames.map((f) => f.t);
@@ -263,7 +282,7 @@ export function analyzeSquat(frames, { estaturaCm = null } = {}) {
 
   const segments = segmentReps(angles);
   const bars = interpolateBarPath(barPoints(frames), 12);
-  const cmPerUnit = estaturaCm ? scaleFromEstatura(frames, side, estaturaCm) : null;
+  const cmPerUnit = estaturaCm ? scaleFromEstatura(frames, side, estaturaCm, joints.scaleRatio) : null;
 
   // Barra en el fotograma pedido; si esa muñeca no se ve, busca el punto válido más próximo.
   const barAt = (idx, maxOff = 10) => {
@@ -333,12 +352,13 @@ export function analyzeSquat(frames, { estaturaCm = null } = {}) {
 
   const visByFrame = frames.map((f) => {
     if (!f.lm) return 0;
-    const idx = [side.hip, side.knee, side.ankle, ...WRISTS];
+    const idx = [...side.chain, ...WRISTS];
     return mean(idx.map((i) => (f.lm[i] ? f.lm[i].visibility ?? 1 : 0)));
   });
   const framesTracked = visByFrame.filter((v) => v > 0).length;
 
   return {
+    kind,
     side: side.name,
     fps,
     durationS,
@@ -366,6 +386,11 @@ export function analyzeSquat(frames, { estaturaCm = null } = {}) {
   };
 }
 
+// La sentadilla es el caso particular de medir la rodilla.
+export function analyzeSquat(frames, opts = {}) {
+  return analyzeLift(frames, { ...opts, kind: "squat" });
+}
+
 function median(xs) {
   const sorted = [...xs].sort((a, b) => a - b);
   return sorted[Math.floor(sorted.length / 2)];
@@ -378,6 +403,7 @@ export function toVideoAnalysis(analysis, { id, date, exerciseId, createdAt }) {
     date,
     exerciseId,
     source: "video",
+    kind: analysis.kind === "bench" ? "bench" : "squat",
     fps: analysis.fps,
     durationS: analysis.durationS,
     reps: analysis.reps.map((r) => ({
@@ -432,6 +458,7 @@ export function validVideoAnalysis(r) {
     r.exerciseId.length > 0 &&
     r.exerciseId.length <= 60 &&
     r.source === "video" &&
+    (r.kind === undefined || r.kind === "squat" || r.kind === "bench") &&
     num(r.fps, 0.5, 120) &&
     num(r.durationS, 0, 600) &&
     Array.isArray(r.reps) &&

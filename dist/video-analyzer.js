@@ -2,7 +2,7 @@
 // demanda, recorre el video por seeks y devuelve el análisis puro de kinematics.js.
 // El archivo elegido nunca sale del dispositivo: se procesa con un elemento de
 // video local y no se guarda ni se envía a ningún servidor.
-import { analyzeSquat } from "./kinematics.js";
+import { analyzeLift } from "./kinematics.js";
 
 // Rutas relativas para funcionar también desde la subruta del repositorio.
 const VENDOR = "./vendor/mediapipe";
@@ -141,6 +141,7 @@ export async function analyzeVideoFile(
     onFrame = null,
     shouldCancel = () => false,
     estaturaCm = null,
+    kind = "squat",
     mount = null,
   } = {},
 ) {
@@ -220,7 +221,7 @@ export async function analyzeVideoFile(
       frames[frames.length - 1].barCount = trail.length;
       onProgress(Math.min(1, t / video.duration));
     }
-    const analysis = analyzeSquat(frames, { estaturaCm });
+    const analysis = analyzeLift(frames, { estaturaCm, kind });
     return {
       analysis,
       replay: { video, overlay, frames, trail, release },

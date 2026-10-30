@@ -10,6 +10,7 @@ import {
   interpolateGaps,
   segmentReps,
   analyzeSquat,
+  analyzeLift,
   toVideoAnalysis,
   validVideoAnalysis,
   scaleFromEstatura,
@@ -40,6 +41,27 @@ function frameWithKneeAngle(degT, t) {
   return { t, lm };
 }
 
+// Press: hombro abajo y muñeca (barra) arriba; al extender el codo la barra sube.
+function frameWithElbowAngle(degT, t) {
+  const lu = 0.22;
+  const rad = (degT * Math.PI) / 180;
+  const d = Math.sqrt(2 * lu ** 2 - 2 * lu ** 2 * Math.cos(rad));
+  const offset = Math.sqrt(Math.max(0, lu ** 2 - (d / 2) ** 2));
+  const lm = Array.from({ length: 33 }, () => null);
+  const point = (x, y) => ({ x, y, z: 0, visibility: 1 });
+  lm[11] = point(0.5, 0.5 + d / 2);
+  lm[13] = point(0.5 + offset, 0.5);
+  lm[15] = point(0.5, 0.5 - d / 2);
+  lm[12] = point(0.51, 0.5 + d / 2);
+  lm[14] = point(0.51 + offset, 0.5);
+  lm[16] = point(0.51, 0.5 - d / 2);
+  lm[23] = point(0.4, 0.7);
+  lm[24] = point(0.41, 0.7);
+  lm[25] = point(0.38, 0.85);
+  lm[26] = point(0.39, 0.85);
+  return { t, lm };
+}
+
 // Pseudoaleatorio determinista para que los tests no varíen entre corridas.
 function lcg(seed) {
   let s = seed;
@@ -51,14 +73,15 @@ function lcg(seed) {
 
 // Serie de ángulos objetivo: 1 s arriba, 1.4 s de bajada (175→65), 0.3 s de fondo,
 // 1.1 s de subida. Devuelve fotogramas a la frecuencia dada.
-function syntheticFrames({ reps = 4, fps = 18, noise = 0, seed = 7 } = {}) {
+function syntheticFrames({ reps = 4, fps = 18, noise = 0, seed = 7, topDeg = 175, bottomDeg = 65, lift = "squat" } = {}) {
   const rand = lcg(seed);
+  const rom = topDeg - bottomDeg;
   const phaseAngles = (p) => {
-    if (p < 1) return 175;
-    if (p < 2.4) return 175 - (110 * (p - 1)) / 1.4;
-    if (p < 2.7) return 65;
-    if (p < 3.8) return 65 + (110 * (p - 2.7)) / 1.1;
-    return 175;
+    if (p < 1) return topDeg;
+    if (p < 2.4) return topDeg - (rom * (p - 1)) / 1.4;
+    if (p < 2.7) return bottomDeg;
+    if (p < 3.8) return bottomDeg + (rom * (p - 2.7)) / 1.1;
+    return topDeg;
   };
   const repS = 3.8;
   const totalS = reps * repS + 1;
@@ -68,7 +91,10 @@ function syntheticFrames({ reps = 4, fps = 18, noise = 0, seed = 7 } = {}) {
     const t = i / fps;
     const target = phaseAngles(t % repS);
     const jitter = noise ? (rand() - 0.5) * 2 * noise : 0;
-    frames.push(frameWithKneeAngle(Math.max(20, Math.min(179, target + jitter)), t));
+    const frame = lift === "bench"
+      ? frameWithElbowAngle(Math.max(20, Math.min(179, target + jitter)), t)
+      : frameWithKneeAngle(Math.max(20, Math.min(179, target + jitter)), t);
+    frames.push(frame);
   }
   return frames;
 }
@@ -285,4 +311,57 @@ test("validState acepta videoAnalyses válidos, opcionales, y rechaza dañados",
   const dup = fixture();
   dup.videoAnalyses = [record, { ...record }];
   assert.equal(validState(dup), false, "ids duplicados");
+});
+
+test("analyzeLift cuenta press de banca con el ángulo de codo y velocidad en cm", () => {
+  const frames = syntheticFrames({ reps: 3, topDeg: 170, bottomDeg: 75, lift: "bench" });
+  const a = analyzeLift(frames, { estaturaCm: 175, kind: "bench" });
+  assert.equal(a.kind, "bench");
+  assert.equal(a.summary.repCount, 3);
+  assert.equal(a.side, "izquierdo");
+  for (const rep of a.reps) {
+    assert.ok(Math.abs(rep.romDeg - 95) <= 6, `romDeg ${rep.romDeg}`);
+    assert.ok(Math.abs(rep.eccentricMs - 1400) <= 200, `ecc ${rep.eccentricMs}`);
+    assert.ok(rep.concentricVel !== null, "velocidad por rep");
+  }
+  // húmero observado 0.22 → (0.186 × 175) / 0.22 ≈ 148; subida de ~0.085 u en ~1 s
+  assert.ok(a.summary.meanConcentricVel > 8 && a.summary.meanConcentricVel < 20, `vel ${a.summary.meanConcentricVel}`);
+});
+
+test("analyzeSquat sigue siendo el caso particular de la rodilla", () => {
+  const frames = syntheticFrames({ reps: 2 });
+  const a = analyzeSquat(frames);
+  assert.equal(a.kind, "squat");
+  assert.equal(a.summary.repCount, 2);
+});
+
+test("los registros de press validan y conservan su tipo", () => {
+  const record = toVideoAnalysis(
+    analyzeLift(syntheticFrames({ reps: 2, topDeg: 170, bottomDeg: 75, lift: "bench" }), {
+      estaturaCm: 180,
+      kind: "bench",
+    }),
+    { id: "vid-bench1", date: "2026-10-30", exerciseId: "bench", createdAt: 0 },
+  );
+  assert.equal(record.kind, "bench");
+  assert.equal(validVideoAnalysis(record), true);
+  assert.equal(validVideoAnalysis({ ...record, kind: "prensa" }), false);
+  // un registro antiguo sin kind sigue siendo válido
+  const { kind, ...legacy } = record;
+  assert.equal(validVideoAnalysis(legacy), true);
+});
+
+test("el fixture real de banca detecta 2 repeticiones con el codo", () => {
+  const raw = JSON.parse(readFileSync(new URL("../prototype/fixture-bench.json", import.meta.url), "utf8"));
+  const frames = raw.frames.map((f) => ({
+    t: f.t,
+    lm: f.lm ? f.lm.map(([x, y, z, v]) => ({ x, y, z, visibility: v })) : null,
+  }));
+  const a = analyzeLift(frames, { estaturaCm: 175, kind: "bench" });
+  assert.equal(a.kind, "bench");
+  assert.equal(a.summary.repCount, 2);
+  assert.ok(a.summary.avgRomDeg > 100, `ROM media ${a.summary.avgRomDeg}`);
+  assert.ok(a.summary.barDriftPct < 30, `deriva ${a.summary.barDriftPct}`);
+  assert.ok(a.summary.meanConcentricVel !== null);
+  assert.ok(a.quality.visibilityPct > 60);
 });
