@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { recordSetReps, currentRestTimer, elapsedTimeLabel, pendingSet, routinePlan, validState } from "../dist/core.js";
+import { recordSetReps, currentRestTimer, elapsedTimeLabel, closePastSessions, pendingSet, routinePlan, validState } from "../dist/core.js";
 
 const start = Date.parse("2026-10-22T16:00:00Z");
 function fixture() {
@@ -73,6 +73,37 @@ test("terminar la sesión o eliminar la serie o su ejercicio deja el cronómetro
     remove(state);
     assert.equal(currentRestTimer(state), null);
   }
+});
+
+test("volver a abrir el mismo día no cierra la sesión ni detiene el descanso", () => {
+  const state = fixture();
+  recordSetReps(state, "session-1", 0, 0, 10, start);
+  assert.equal(closePastSessions(state, "2026-10-22"), 0);
+  assert.equal(state.sessions[0].finished, false);
+  assert.equal(currentRestTimer(state, start + 60000).elapsedMs, 60000);
+});
+
+test("reabrir en otra fecha cierra la sesión abierta y detiene el cronómetro", () => {
+  const state = fixture();
+  recordSetReps(state, "session-1", 0, 0, 10, start);
+  assert.equal(closePastSessions(state, "2026-10-23"), 1);
+  assert.equal(state.sessions[0].finished, true);
+  assert.equal(state.restTimer, null);
+  assert.equal(currentRestTimer(state, start + 60000), null);
+});
+
+test("cerrar sesiones antiguas conserva la sesión de hoy y su descanso", () => {
+  const state = fixture();
+  state.sessions.push({ id: "session-old", date: "2026-10-20", name: "Anterior", finished: true, notes: "", feeling: 4, exercises: [] });
+  state.sessions.push({ id: "session-stale", date: "2026-10-21", name: "Abandonada", finished: false, notes: "", feeling: 3, exercises: [] });
+  recordSetReps(state, "session-1", 0, 0, 10, start);
+  assert.equal(closePastSessions(state, "2026-10-22"), 1);
+  assert.equal(state.sessions.find((s) => s.id === "session-stale").finished, true);
+  assert.equal(state.sessions.find((s) => s.id === "session-old").finished, true);
+  assert.equal(state.sessions.find((s) => s.id === "session-1").finished, false);
+  assert.equal(currentRestTimer(state, start + 60000).sessionId, "session-1");
+  assert.equal(closePastSessions(state, "2026-10-23"), 1);
+  assert.equal(state.restTimer, null);
 });
 
 test("el origen se conserva aunque se borre una serie anterior y cambien los índices", () => {

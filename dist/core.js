@@ -1,7 +1,142 @@
-import { exerciseMuscles, muscleNames } from "./exercises.js";
+import { exerciseMuscles, muscleNames, exercises } from "./exercises.js";
 import { exerciseRegions, validMuscleRegions } from "./muscle-regions.js";
-import { validCardioRecord } from "./cardio.js";
+import { validCardioRecord, cardioActivity } from "./cardio.js";
 import { validVideoAnalysis } from "./kinematics.js";
+
+const r1 = (n) => Math.round(n * 10) / 10;
+
+// Resumen compacto del diario para entregarlo a un modelo de lenguaje junto con
+// instrucciones de interpretación. No incluye el catálogo de alimentos: cada
+// entrada lleva sus valores según los gramos registrados. Los días sin registro
+// se omiten: para el modelo, ausencia significa "no registrado", nunca cero.
+export function llmDigest(state, { days = 90, now = localDate() } = {}) {
+  const desde = days ? shiftDate(now, -(days - 1)) : "0000-01-01";
+  const inRange = (d) => d >= desde && d <= now;
+  const exerciseNames = new Map(exercises.map((ex) => [ex[0], ex[1]]));
+
+  const entryDays = new Map();
+  for (const e of state.entries) {
+    if (!inRange(e.date)) continue;
+    if (!entryDays.has(e.date)) entryDays.set(e.date, []);
+    entryDays.get(e.date).push(e);
+  }
+  const alimentacion = [...entryDays.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([fecha, list]) => {
+      const t = mealTotals(list);
+      return {
+        fecha,
+        totales: {
+          kcal: Math.round(t.kcal),
+          proteina_g: r1(t.protein),
+          carbohidratos_g: r1(t.carbs),
+          grasa_g: r1(t.fat),
+        },
+        comidas: list.map((e) => ({
+          momento: e.meal,
+          nombre: e.food.name,
+          gramos: e.grams,
+          kcal: Math.round((Number(e.food.kcal) * e.grams) / 100),
+          proteina_g: r1((Number(e.food.protein) * e.grams) / 100),
+          carbohidratos_g: r1((Number(e.food.carbs) * e.grams) / 100),
+          grasa_g: r1((Number(e.food.fat) * e.grams) / 100),
+        })),
+      };
+    });
+
+  const entrenamiento = state.sessions
+    .filter((s) => inRange(s.date))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((s) => ({
+      fecha: s.date,
+      sesion: s.name,
+      finalizada: s.finished,
+      ejercicios: s.exercises
+        .map((ex) => ({
+          ejercicio: ex.name,
+          series: ex.sets
+            .filter((t) => t.done)
+            .map((t) => ({ kg: t.kg, reps: t.reps, rir: t.rir === "" || t.rir == null ? null : t.rir })),
+        }))
+        .filter((ex) => ex.series.length),
+    }))
+    .filter((s) => s.ejercicios.length);
+
+  const cardio = (state.cardio || [])
+    .filter((r) => inRange(r.date))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((r) => ({
+      fecha: r.date,
+      actividad: cardioActivity(r.activityId)?.label || r.activityId,
+      minutos: r.minutes,
+      kcal_activas: r.kcal,
+    }));
+
+  const analisisVideo = (state.videoAnalyses || [])
+    .filter((r) => inRange(r.date))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((r) => ({
+      fecha: r.date,
+      ejercicio: exerciseNames.get(r.exerciseId) || r.exerciseId,
+      tipo: r.kind === "bench" ? "press (codo)" : "sentadilla (rodilla)",
+      repeticiones: r.summary.repCount,
+      rom_medio_grados: r.summary.avgRomDeg,
+      bajar_s: r1(r.summary.avgEccentricMs / 1000),
+      subir_s: r1(r.summary.avgConcentricMs / 1000),
+      velocidad_subida:
+        r.summary.meanConcentricVel == null
+          ? null
+          : { valor: r.summary.meanConcentricVel, unidad: r.velocityUnit === "cm" ? "cm/s" : "u/s" },
+    }));
+
+  const peso = state.weights
+    .filter((w) => inRange(w.date))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((w) => ({ fecha: w.date, kg: w.kg }));
+
+  const goals = state.goals || {};
+  const profile = state.profile || null;
+  const seriesTotal = sum(entrenamiento, (s) => sum(s.ejercicios, (ex) => ex.series.length));
+  const volumenTotal = sum(entrenamiento, (s) =>
+    sum(s.ejercicios, (ex) => sum(ex.series, (t) => t.kg * t.reps)),
+  );
+  const modos = { lose: "perder peso", maintain: "mantener peso", gain: "ganar peso" };
+
+  return {
+    generado_el: now,
+    periodo: days ? `últimos ${days} días hasta ${now}` : `todo el historial hasta ${now}`,
+    perfil: profile
+      ? { edad: profile.age, sexo: profile.sex, estatura_cm: profile.height, peso_kg: profile.weight }
+      : null,
+    objetivos: {
+      kcal_diarias: goals.kcal,
+      mantenimiento_kcal: goals.maintenance,
+      proteina_g: goals.protein,
+      carbohidratos_g: goals.carbs,
+      grasa_g: goals.fat,
+      objetivo_peso_kg: goals.weight,
+      sesiones_por_semana: goals.sessions,
+      modo: modos[goals.mode] || goals.mode,
+    },
+    resumen: {
+      dias_con_alimentacion: alimentacion.length,
+      kcal_media_dias_registrados: alimentacion.length
+        ? Math.round(sum(alimentacion, (d) => d.totales.kcal) / alimentacion.length)
+        : null,
+      sesiones: entrenamiento.length,
+      series_completadas: seriesTotal,
+      volumen_total_kg: Math.round(volumenTotal),
+      pesajes: peso.length,
+      registros_cardio: cardio.length,
+      analisis_video: analisisVideo.length,
+    },
+    alimentacion,
+    entrenamiento,
+    cardio,
+    analisisVideo,
+    peso,
+  };
+}
 
 export const sum = (items, fn) => items.reduce((n, item) => n + fn(item), 0);
 export function localDate(date = new Date()) {
@@ -151,6 +286,30 @@ export function elapsedTimeLabel(milliseconds) {
   const minutes = Math.floor(seconds / 60) % 60;
   const pad = (value) => String(value).padStart(2, "0");
   return `${hours ? `${hours}:` : ""}${pad(minutes)}:${pad(seconds % 60)}`;
+}
+
+// La sesión vive en su día de entrenamiento: al reabrir Pulso en otra fecha,
+// las sesiones sin terminar de días anteriores se cierran y su descanso se detiene.
+// Se revisa solo al cargar la app, así una sesión en pantalla cruza la medianoche sin cerrarse.
+export function closePastSessions(state, today = localDate()) {
+  const sessions = Array.isArray(state?.sessions) ? state.sessions : [];
+  let closed = 0;
+  for (const session of sessions) {
+    if (
+      session &&
+      session.finished === false &&
+      typeof session.date === "string" &&
+      session.date < today
+    ) {
+      session.finished = true;
+      closed++;
+    }
+  }
+  if (closed && state.restTimer) {
+    const timerSession = sessions.find((item) => item?.id === state.restTimer.sessionId);
+    if (!timerSession || timerSession.finished) state.restTimer = null;
+  }
+  return closed;
 }
 export function trainingDays(date, mode = "rolling") {
   return mode === "week"

@@ -14,6 +14,7 @@ import {
   recordSetReps,
   currentRestTimer,
   elapsedTimeLabel,
+  closePastSessions,
   trainingStats,
   trainingDays,
   weightStats,
@@ -21,6 +22,7 @@ import {
   patternProgress,
   trendWord,
   validState,
+  llmDigest,
 } from "./core.js";
 import {
   exercises,
@@ -1688,7 +1690,7 @@ function goalBalance(g) {
   return `<strong>${delta < 0 ? "Déficit" : delta > 0 ? "Superávit" : "Mantenimiento"}: ${fmt(Math.abs(delta))} kcal/día</strong>`;
 }
 function goalsPage() {
-  return `${heading("Un plan que se adapta a ti.", "Define tus metas y ajústalas cuando lo necesites.", "", "MIS OBJETIVOS")}<article class="card settings-panel">${goalsForm()}</article><article class="card settings-panel spacer-top"><div class="section-heading"><div><h2>Tus datos, contigo</h2><p>Se guardan en este navegador. Exporta una copia para moverlos a otro dispositivo.</p></div>${icon("lock")}</div><div class="settings-actions">${button("Exportar copia", "export", "download", "")}${button("Importar copia", "import", "upload", "")}${!state.demo ? button("Explorar demo", "load-demo", "spark", "") : ""}</div><p class="source-note">La copia incluye tus objetivos y todos los registros. Importar sustituye los datos actuales después de mostrarte el resumen.</p><input id="import-file" type="file" accept="application/json,.json" class="hide"></article>`;
+  return `${heading("Un plan que se adapta a ti.", "Define tus metas y ajústalas cuando lo necesites.", "", "MIS OBJETIVOS")}<article class="card settings-panel">${goalsForm()}</article><article class="card settings-panel spacer-top"><div class="section-heading"><div><h2>Tus datos, contigo</h2><p>Se guardan en este navegador. Exporta una copia para moverlos a otro dispositivo.</p></div>${icon("lock")}</div><div class="settings-actions">${button("Exportar copia", "export", "download", "")}${button("Importar copia", "import", "upload", "")}${!state.demo ? button("Explorar demo", "load-demo", "spark", "") : ""}</div><p class="source-note">La copia incluye tus objetivos y todos los registros. Importar sustituye los datos actuales después de mostrarte el resumen.</p><input id="import-file" type="file" accept="application/json,.json" class="hide"></article><article class="card settings-panel spacer-top"><div class="section-heading"><div><h2>Consulta tus datos con una IA</h2><p>Un texto con tus registros y un preset de instrucciones, listo para pegar en ChatGPT, Claude o Gemini.</p></div>${icon("spark")}</div><div class="settings-actions">${button("Generar texto para una IA", "llm-export", "spark", "")}</div><p class="source-note">Los datos salen del dispositivo solo al pegarlos en el chat que elijas. No se envía nada automáticamente.</p></article>`;
 }
 function bindPage() {
   $("#selected-date")?.addEventListener("change", (e) => {
@@ -2408,6 +2410,47 @@ function confirmModal(title, description, onConfirm, label = "Confirmar") {
     onConfirm();
   });
 }
+
+// ===== Consulta de datos con una IA =====
+
+const LLM_GUIDE = `Actúa como el analista de mi diario Pulso, donde registro mi alimentación, mi entrenamiento, mi cardio, mi peso y análisis por video de mis series. Más abajo te paso mis datos reales en JSON. Léelos una vez y respóndeme a partir de ellos sin repetir estas instrucciones.
+
+CÓMO LEER LOS DATOS
+- "perfil" y "objetivos": mis datos y metas configuradas. El objetivo de kcal es el plan base; el déficit o superávit es el planificado frente al mantenimiento, no una medición de mi gasto real.
+- "alimentacion": por día, totales y cada comida registrada. Los valores por alimento son de referencia (USDA SR28) aplicados a los gramos que anoté. Un día sin registro significa "no registrado", no cero.
+- "entrenamiento": mis sesiones y sus series completadas (kg × reps). "rir" son las repeticiones que creo me quedaban al terminar la serie; rir null significa que no lo anoté. El volumen es kg × reps.
+- "cardio": minutos y kcal activas estimadas con MET de referencia o introducidas por mí desde un dispositivo; no son una medición individual y se suman al objetivo de comida de ese día.
+- "analisisVideo": medidas estimadas desde la posición detectada de mi cuerpo (rodilla en sentadilla, codo en press): repeticiones, ROM medio en grados, tiempos de fase y velocidad aproximada de subida. Son referencias de registro, no una evaluación de mi técnica.
+- "peso": mis pesajes; la tendencia importa más que un día puntual.
+- "resumen" es un conteo rápido para orientarte; los bloques detallados son la fuente.
+
+CÓMO RESPONDERME
+- En español, cercano y objetivo. Sin culpa ni juicios sobre comida o cuerpo; un día incompleto no es un fracaso.
+- Cita números y fechas concretas de los datos al responder. Si algo no está en los datos, di "no registrado" en vez de inventarlo.
+- Sé breve y accionable; usa tablas o listas al comparar o resumir. Contesta primero lo que pregunté y no pidas más datos salvo que falten de verdad.
+- Compara tendencias (semanas o medias) en vez de días sueltos cuando hable de progreso, y menciona los límites de las estimaciones si afectan la conclusión.
+- No hagas diagnósticos ni planes clínicos; si pregunto algo médico, sugiéreme un profesional de la salud.
+
+Mis datos empiezan justo después de esta línea.`;
+
+function llmText(days) {
+  return `${LLM_GUIDE}\n\n${JSON.stringify(llmDigest(state, { days }), null, 1)}`;
+}
+
+function llmModal() {
+  openModal(
+    "Consultar mis datos con una IA",
+    "Un solo texto con instrucciones y tus registros, listo para pegar en ChatGPT, Claude o Gemini.",
+    `<div class="field wide"><label for="llm-period">Periodo incluido</label><select id="llm-period"><option value="30">Últimos 30 días</option><option value="90" selected>Últimos 90 días</option><option value="">Todo el historial</option></select></div><textarea id="llm-text" class="llm-text" readonly spellcheck="false"></textarea><div class="settings-actions">${button("Copiar texto", "llm-copy", "copy", "")}${button("Descargar .txt", "llm-download", "download", "")}</div><p class="help-text">El texto sale de este dispositivo solo cuando lo pegas o lo envías al chat que elijas: revisa la política de privacidad de ese servicio.</p>`,
+  );
+  const fill = () => {
+    const value = $("#llm-period").value;
+    $("#llm-text").value = llmText(value === "" ? 0 : +value);
+  };
+  fill();
+  $("#llm-period").addEventListener("change", fill);
+}
+
 function exportData() {
   const blob = new Blob(
     [
@@ -2868,6 +2911,34 @@ document.addEventListener("click", (e) => {
     case "export":
       exportData();
       break;
+    case "llm-export":
+      llmModal();
+      break;
+    case "llm-copy": {
+      const llm = $("#llm-text")?.value;
+      if (!llm) break;
+      navigator.clipboard?.writeText(llm).then(
+        () => toast("Texto copiado. Pégalo en tu chat de IA."),
+        () => {
+          $("#llm-text").select();
+          document.execCommand("copy");
+          toast("Texto copiado.");
+        },
+      );
+      break;
+    }
+    case "llm-download": {
+      const llmTxt = $("#llm-text")?.value;
+      if (!llmTxt) break;
+      const llmBlob = new Blob([llmTxt], { type: "text/plain;charset=utf-8" });
+      const llmUrl = URL.createObjectURL(llmBlob);
+      const llmA = document.createElement("a");
+      llmA.href = llmUrl;
+      llmA.download = `pulso-para-ia-${today()}.txt`;
+      llmA.click();
+      setTimeout(() => URL.revokeObjectURL(llmUrl), 1000);
+      break;
+    }
     case "import":
       $("#import-file")?.click();
       break;
@@ -2939,6 +3010,15 @@ async function init() {
       showOnboarding = true;
       toast(
         "No se pudo leer el almacenamiento. Importa una copia o exporta antes de cerrar.",
+      );
+    }
+    const closedSessions = closePastSessions(state);
+    if (closedSessions) {
+      persist();
+      toast(
+        closedSessions === 1
+          ? "El día cambió: cerramos la sesión que quedó abierta. Puedes reabrirla cuando quieras."
+          : `El día cambió: cerramos ${closedSessions} sesiones que quedaron abiertas. Puedes reabrirlas cuando quieras.`,
       );
     }
     render();

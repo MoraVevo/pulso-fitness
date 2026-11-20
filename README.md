@@ -33,6 +33,7 @@ npm run check
 - Configuración inicial con edad, estatura, peso, sexo para la ecuación, actividad diaria y objetivo; propone calorías y macros iniciales editables.
 - Registro diario de peso, media móvil de siete días, comparación entre semanas y gráficas.
 - Exportación e importación JSON con validación.
+- Exportación de un texto listo para una IA: tus registros en JSON compacto con un preset de instrucciones en español, para pegar en ChatGPT, Claude o Gemini y preguntar directamente sobre tus datos.
 - Campos de al menos 16 px en móvil para evitar el acercamiento al enfocarlos, viewport limitado a escala 1 y gestos de página sin zoom. Safari y los ajustes de accesibilidad del navegador pueden conservar el zoom manual ([WebKit](https://webkit.org/blog/7367/new-interaction-behaviors-in-ios-10/)).
 
 ## Publicación en GitHub Pages
@@ -79,6 +80,8 @@ El cronómetro de descanso comienza al confirmar las repeticiones de una serie n
 
 La hora de registro se conserva en `recordedAt` de la serie y la referencia activa en el campo opcional `restTimer`. El tiempo se calcula desde esa hora, por lo que se recupera al cambiar de app, recargar o volver a abrir Pulso en el mismo navegador y origen, mientras se conserven sus datos. La actualización visual se suspende cuando la página está oculta. No incluye alarma ni notificación en segundo plano; depende del reloj del dispositivo. Las copias anteriores siguen siendo compatibles y las series copiadas a una rutina o sesión nueva comienzan sin hora de registro.
 
+Las sesiones pertenecen a su día de entrenamiento, sin límite de 24 horas: si la persona entrena pasando la medianoche con la aplicación abierta, la sesión y su cronómetro continúan. Al volver a abrir Pulso en una fecha posterior, las sesiones que quedaron sin terminar de días anteriores se cierran solas y su cronómetro se detiene; sus series quedan guardadas en su fecha y la sesión puede reabrirse desde Entrenamiento.
+
 La aplicación inicia con los registros vacíos. La demo se puede cargar manualmente desde Mis objetivos. Si el navegador aún conserva la demo anterior, sus datos de ejemplo se eliminan y aparece la configuración inicial. Los registros propios de versiones anteriores se conservan mientras se completa esa configuración.
 
 La primera visita solicita los datos necesarios para estimar objetivos. Los diarios de alimentos, entrenamientos y peso empiezan vacíos. Se usa Mifflin–St Jeor y un factor de actividad para proponer mantenimiento; perder o ganar peso ajusta esa referencia en 10%. Los macros se inicializan con una distribución editable de 25% proteínas, 45% carbohidratos y 30% grasas. Son puntos de partida, no una medición del gasto ni una recomendación clínica. La ecuación y el planificador de NIDDK están orientados a adultos; no uses esta estimación durante embarazo o lactancia. [Fuente de la ecuación](https://pubmed.ncbi.nlm.nih.gov/2305711/) · [NIDDK Body Weight Planner](https://www.niddk.nih.gov/bwp%20).
@@ -86,6 +89,12 @@ La primera visita solicita los datos necesarios para estimar objetivos. Los diar
 Los registros personales y el perfil se guardan en `localStorage` del navegador. Esta versión no incluye cuentas, sincronización entre dispositivos, base de marcas, escaneo de códigos de barras ni aplicación nativa. El JSON exportado permite mover los datos entre navegadores. Si se borran los datos del navegador, se necesita una copia para recuperarlos. Los archivos publicados no contienen registros personales. Los perfiles y registros propios creados con versiones anteriores se conservan; se pide completar el nuevo perfil inicial una sola vez.
 
 Las medias nutricionales omiten días sin registros y pueden incluir días incompletos. Las series de ejercicios con peso corporal reflejan únicamente la carga añadida en el volumen. El déficit mostrado es el planificado a partir de las calorías y mantenimiento configurados; no es una medición del gasto energético.
+
+## Consulta con una IA
+
+En **Mis objetivos → Consulta tus datos con una IA** se genera un texto que combina un preset de instrucciones en español con un JSON compacto de tus registros del periodo elegido (30 o 90 días, o todo el historial): alimentación por día con totales y comidas, sesiones con series completadas, cardio, análisis por video y pesajes, más un resumen de conteos. El preset le explica al modelo qué significa cada campo, qué son estimaciones (kcal activas, déficit planificado, análisis por video), que la ausencia de registros significa "no registrado" y no cero, y cómo debe responder: en español, con números y fechas concretas, sin juicios ni diagnósticos.
+
+El texto no se envía a ningún servicio automáticamente: sale del dispositivo solo cuando lo pegas o lo adjuntas al chat que elijas. No incluye el catálogo de alimentos ni datos ajenos a tus registros; la copia de seguridad JSON completa sigue siendo el formato para mover tus datos entre dispositivos.
 
 ## Fuente de alimentos
 

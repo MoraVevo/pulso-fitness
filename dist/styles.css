@@ -3557,3 +3557,17 @@ dialog:has(.routine-builder) > .modal-header {
   background: #000;
   aspect-ratio: 16 / 9;
 }
+.llm-text {
+  width: 100%;
+  min-height: 240px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f9faf7;
+  color: var(--ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  resize: vertical;
+}
