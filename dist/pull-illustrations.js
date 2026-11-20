@@ -10,13 +10,57 @@ function pulldown(neutral = false) {
     + rect(85,117,55,7,C.pad,3) + arrow("M163 45V73",[163,74]);
 }
 function pullup(supine = false) {
-  const hx = supine ? [97,135] : [75,157];
-  return line("M40 160V18H196V160M29 161H53M183 161H209",C.metal,6)
-    + line("M64 22H168",C.dark,5) + leg([110,110],[98,135],[119,148],true)
-    + leg([122,110],[136,134],[119,151],false,-1) + torso(116,69,0,true) + head(116,54)
-    + arm([101,76],[83,59],[hx[0],23],true) + arm([131,76],[151,59],[hx[1],23])
-    + line(`M${hx[0]-3} 23h6m${hx[1]-hx[0]-6} 0h6`,supine ? C.light : C.skin,5)
-    + arrow("M174 108V80",[174,79],180);
+  const handX = supine ? 99 : 78;
+  const elbowX = supine ? 91 : 81;
+  const rack = line("M38 159V14M202 14V159", C.metal, 6)
+    + line("M28 161H49M191 161H212", C.dark, 5)
+    + line("M38 28L49 14M202 28L191 14", C.metal, 3)
+    + line("M38 13H202", C.dark, 5);
+  const shoulders = path("M116 51Q117 55 114 56L105 55Q99 53 98 58Q97 63 104 66L109 71H131L136 66Q143 63 142 58Q141 53 135 55L126 56Q123 55 124 51Z", C.skin)
+    + path("M116 52H124Q124 57 127 59Q121 64 117 61L113 58Z", C.shade);
+  const face = path("M109 45Q109 34 120 34Q131 34 131 45L130 52Q128 59 120 60Q112 59 110 52Z", C.skin)
+    + path("M109 48Q105 34 115 32Q125 29 132 37L131 45L127 42L125 38Q119 43 113 41L112 48Z", C.hair)
+    + line("M114 47H116M124 47H126", C.hair, 1.4)
+    + line("M119 54Q121 55 123 54", C.shade, 1);
+  function hand(side) {
+    const x = side === 1 ? handX : 240 - handX;
+    return `<g transform="translate(${x} 13) scale(${side} 1)">`
+      + (supine
+        ? path("M-3 9L-4 5L-8 2Q-10 0-9-2Q-8-3-6-1L-4 0L-5-3Q-5-5-2-5Q1-7 4-4L5 0L4 6L3 9Z", C.skin)
+          + line("M-3-2L-2 1M0-3L1 0M3-2L4 0", C.shade, 1)
+        : path("M-3 9L-5 5L-5 0Q-6-5-2-5L2-5Q5-5 5-2L4 1L7-1Q9-3 10-1Q11 1 8 3L4 6L3 9Z", C.skin)
+          + line("M-3-3L-3 0M0-4V-1M3-3V0", C.shade, .9)
+          + line("M5 2L2 5", C.shade, 1))
+      + "</g>";
+  }
+  // Vista frontal: una ligera flexión deja visibles ambas pantorrillas y pies.
+  function hangingLeg(side, far) {
+    const skin = far ? C.shade : C.skin;
+    return `<g transform="translate(120 0) scale(${side} 1)">`
+      + segment([6, 100], [9, 128], 5.7, 3.9, skin)
+      + ellipse(9, 128, 3.9, 4, skin)
+      + segment([9, 128], [7, 153], 4, 2.5, skin)
+      + path("M1 98L11 97L14 112Q10 115 4 114Z", C.shorts)
+      + path("M4 152Q7 154 10 152L14 158L18 161Q19 165 15 165L5 162Q2 161 3 157Z", C.shoe)
+      + line("M4 161L15 164H17", "#dce6e9", 1.3) + "</g>";
+  }
+  const elbowY = supine ? 56 : 55;
+  return rack
+    + '<g transform="translate(0 -22)">'
+    + hangingLeg(-1, true) + hangingLeg(1, false)
+    + segment([103, 59], [elbowX, elbowY], 4.8, 3.4, C.skin)
+    + segment([elbowX, elbowY], [handX, 40], 3.8, 2.6, C.skin)
+    + ellipse(elbowX, elbowY, 3.4, 3.4, C.skin)
+    + segment([137, 59], [240 - elbowX, elbowY], 4.8, 3.4, C.skin)
+    + segment([240 - elbowX, elbowY], [240 - handX, 40], 3.8, 2.6, C.skin)
+    + ellipse(240 - elbowX, elbowY, 3.4, 3.4, C.skin)
+    + shoulders
+    + path("M105 56L111 56Q113 63 120 64Q127 63 129 56L135 56Q133 62 139 66Q140 74 135 81L130 94Q120 98 110 94L105 81Q100 74 101 66Q107 62 105 56Z", C.shirt)
+    + path("M101 66Q102 76 109 84L111 94L109 93L103 79Q100 72 101 66Z", C.seam)
+    + path("M110 93Q120 96 130 93L132 103H108Z", C.shorts)
+    + '<g transform="translate(120 59) scale(.72) translate(-120 -62)">' + face + '</g>'
+    + '</g>' + hand(1) + hand(-1)
+    + arrow("M177 105V78", [177, 77], 180);
 }
 function bentRow(single = false) {
   if (single) return seat(61,107,115)
