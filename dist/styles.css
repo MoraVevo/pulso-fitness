@@ -3573,3 +3573,5 @@ dialog:has(.routine-builder) > .modal-header {
 }
 
 #weight-form [hidden] { display: none; }
+
+#weight-form .field input, #weight-form .field select { min-width: 0; box-sizing: border-box; }
