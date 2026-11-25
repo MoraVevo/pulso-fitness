@@ -3571,3 +3571,5 @@ dialog:has(.routine-builder) > .modal-header {
   line-height: 1.55;
   resize: vertical;
 }
+
+#weight-form [hidden] { display: none; }

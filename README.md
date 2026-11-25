@@ -31,7 +31,7 @@ npm run check
 - Ventanas de **últimos 7 días móviles** (fecha del diario y los 6 días anteriores) y **semana calendario** (lunes hasta la fecha del diario). No se incluyen registros posteriores a la fecha elegida.
 - Volumen con carga calculado como kg × repeticiones de las series completadas. Las series globales se cuentan una sola vez, aunque participen en varios músculos.
 - Configuración inicial con edad, estatura, peso, sexo para la ecuación, actividad diaria y objetivo; propone calorías y macros iniciales editables.
-- Registro diario de peso, media móvil de siete días, comparación entre semanas y gráficas.
+- Registro diario de peso en kg o lb, media móvil de siete días y gráfica de peso con porcentaje de grasa estimado en un eje secundario. La estimación opcional usa las circunferencias y la ecuación Navy; es orientativa y depende de la calidad de las medidas. Las medidas se guardan con cada registro y las copias anteriores siguen siendo compatibles.
 - Exportación e importación JSON con validación.
 - Exportación de un texto listo para una IA: tus registros en JSON compacto con un preset de instrucciones en español, para pegar en ChatGPT, Claude o Gemini y preguntar directamente sobre tus datos.
 - Campos de al menos 16 px en móvil para evitar el acercamiento al enfocarlos, viewport limitado a escala 1 y gestos de página sin zoom. Safari y los ajustes de accesibilidad del navegador pueden conservar el zoom manual ([WebKit](https://webkit.org/blog/7367/new-interaction-behaviors-in-ios-10/)).

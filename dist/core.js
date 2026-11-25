@@ -394,6 +394,19 @@ export function weightStats(weights, date) {
   };
 }
 
+// Navy circumference equations use inches. Inputs are stored in centimetres.
+export function navyBodyFat({ sex, height, neck, waist, hip }) {
+  if (![height, neck, waist].every((n) => Number.isFinite(n) && n > 0) ||
+      !["male", "female"].includes(sex) ||
+      (sex === "female" && !(Number.isFinite(hip) && hip > 0))) return null;
+  const circumference = waist + (sex === "female" ? hip : 0) - neck;
+  if (circumference <= 0) return null;
+  const value = sex === "male"
+    ? 86.010 * Math.log10(circumference / 2.54) - 70.041 * Math.log10(height / 2.54) + 36.76
+    : 163.205 * Math.log10(circumference / 2.54) - 97.684 * Math.log10(height / 2.54) - 78.387;
+  return Number.isFinite(value) && value > 0 && value < 100 ? Math.round(value * 10) / 10 : null;
+}
+
 // Estimación de 1RM por Epley (kg × (1 + reps/30)), ajustada con el RIR de la
 // serie: fiable hasta ~12 repeticiones efectivas. RIR vacío cuenta como 0 (al
 // fallo), la convención documentada de la app. Fuera de rango devuelve null.
@@ -643,7 +656,11 @@ export function validState(s) {
           num(e.grams, 0.1, 10000) &&
           food(e.food),
       ) &&
-      array(s.weights, (w) => w && date(w.date) && num(w.kg, 1, 500)) &&
+      array(s.weights, (w) => w && date(w.date) && num(w.kg, 1, 500) &&
+        (w.bodyFat === undefined || (w.bodyFat && ["male", "female"].includes(w.bodyFat.sex) &&
+          num(w.bodyFat.height, 120, 230) && num(w.bodyFat.neck, 1, 300) &&
+          num(w.bodyFat.waist, 1, 300) && (w.bodyFat.sex !== "female" || num(w.bodyFat.hip, 1, 300)) &&
+          navyBodyFat(w.bodyFat) !== null))) &&
       (s.cardio === undefined ||
         (array(s.cardio, (r) => r && id(r.id) && date(r.date) && validCardioRecord(r), 10000) &&
           new Set(s.cardio.map((r) => r.id)).size === s.cardio.length)) &&

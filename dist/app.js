@@ -18,6 +18,7 @@ import {
   trainingStats,
   trainingDays,
   weightStats,
+  navyBodyFat,
   e1RM,
   patternProgress,
   trendWord,
@@ -1344,14 +1345,14 @@ function progressPage() {
           )
           .join(
             "",
-          )}</div><div class="grid-2"><article class="card progress-card"><div class="section-heading"><div><h2>Tu evolución de peso</h2><p>Últimos 30 registros · el peso cambia de un día a otro.</p></div><span class="tag">kg</span></div>${weightPlot(weights.slice(-30))}</article><article class="card"><div class="section-heading"><div><h2>Registro de peso</h2><p>Un registro por día. Puedes editarlo.</p></div>${button("Añadir", "weight", "plus", "small")}</div><div class="weight-log">${
+          )}</div><div class="grid-2"><article class="card progress-card"><div class="section-heading"><div><h2>Tu evolución corporal</h2><p>Últimos 30 registros · peso y grasa corporal estimada.</p></div></div>${weightPlot(weights.slice(-30))}</article><article class="card"><div class="section-heading"><div><h2>Registro de peso</h2><p>Un registro por día. Puedes editarlo.</p></div>${button("Añadir", "weight", "plus", "small")}</div><div class="weight-log">${
           weights.length
             ? weights
                 .slice()
                 .reverse()
                 .map(
                   (w) =>
-                    `<div class="history-row"><div><h4>${dateLabel(w.date, { day: "numeric", month: "long" })}</h4><p>${dateLabel(w.date, { weekday: "long", year: "numeric" })}</p></div><b>${fmt(w.kg, 1)} kg</b>${iconButton("edit", "weight", "Editar peso", `data-date="${w.date}"`)}${iconButton("trash", "delete-weight", "Eliminar registro de peso", `data-date="${w.date}"`)}</div>`,
+                    `<div class="history-row"><div><h4>${dateLabel(w.date, { day: "numeric", month: "long" })}</h4><p>${dateLabel(w.date, { weekday: "long", year: "numeric" })}</p></div><b>${fmt(w.kg, 1)} kg${w.bodyFat ? `<br><small>${fmt(navyBodyFat(w.bodyFat), 1)} % grasa estimada</small>` : ""}</b>${iconButton("edit", "weight", "Editar peso", `data-date="${w.date}"`)}${iconButton("trash", "delete-weight", "Eliminar registro de peso", `data-date="${w.date}"`)}</div>`,
                 )
                 .join("")
             : empty(
@@ -1372,25 +1373,16 @@ function progressPage() {
   }`;
 }
 function weightPlot(weights) {
-  if (weights.length < 2)
-    return empty(
-      "Tu tendencia necesita dos puntos.",
-      "Registra tu peso en al menos dos días distintos.",
-      "weight",
-      "Registrar peso",
-      "scale",
-    );
-  const min = Math.floor(Math.min(...weights.map((w) => w.kg)) * 2) / 2 - 0.5,
-    max = Math.ceil(Math.max(...weights.map((w) => w.kg)) * 2) / 2 + 0.5;
-  const first = Date.parse(weights[0].date + "T12:00:00"),
-    last = Date.parse(weights.at(-1).date + "T12:00:00");
-  const points = weights
-    .map(
-      (w) =>
-        `${45 + ((Date.parse(w.date + "T12:00:00") - first) / (last - first)) * 455},${195 - ((w.kg - min) / (max - min)) * 170}`,
-    )
-    .join(" ");
-  return `<svg class="weight-plot" viewBox="0 0 520 220" role="img" aria-label="Evolución de peso entre ${fmt(min, 1)} y ${fmt(max, 1)} kg">${[0, 1, 2, 3, 4].map((i) => `<line x1="45" y1="${25 + i * 42.5}" x2="505" y2="${25 + i * 42.5}" stroke="#e7ecdf" stroke-dasharray="4 4"/><text x="0" y="${29 + i * 42.5}" fill="#96a18b" font-size="10">${fmt(max - ((max - min) * i) / 4, 1)}</text>`).join("")}<polygon points="45,195 ${points} 500,195" fill="#eff4e7"/><polyline points="${points}" fill="none" stroke="#65894c" stroke-width="2.5" stroke-linejoin="round"/>${weights.map((w) => `<circle cx="${45 + ((Date.parse(w.date + "T12:00:00") - first) / (last - first)) * 455}" cy="${195 - ((w.kg - min) / (max - min)) * 170}" r="3.4" fill="#65894c"><title>${dateLabel(w.date)}: ${fmt(w.kg, 1)} kg</title></circle>`).join("")}</svg><div class="plot-labels"><span>${dateLabel(weights[0].date)}</span><span>${dateLabel(weights.at(-1).date)}</span></div>`;
+  if (weights.length < 2) return empty("Tu tendencia necesita dos puntos.", "Registra tu peso en al menos dos días distintos.", "weight", "Registrar peso", "scale");
+  const fat = weights.filter((w) => w.bodyFat && navyBodyFat(w.bodyFat) !== null);
+  const range = (values) => [Math.floor(Math.min(...values) * 2) / 2 - 0.5, Math.ceil(Math.max(...values) * 2) / 2 + 0.5];
+  const [min, max] = range(weights.map((w) => w.kg));
+  const [fatMin, fatMax] = fat.length ? range(fat.map((w) => navyBodyFat(w.bodyFat))) : [0, 1];
+  const first = Date.parse(weights[0].date + "T12:00:00"), last = Date.parse(weights.at(-1).date + "T12:00:00");
+  const x = (w) => 45 + ((Date.parse(w.date + "T12:00:00") - first) / (last - first)) * 425;
+  const y = (v, lo, hi) => 195 - ((v - lo) / (hi - lo)) * 170;
+  const series = (rows, value, lo, hi, color, unit) => `<polyline points="${rows.map((w) => `${x(w)},${y(value(w), lo, hi)}`).join(" ")}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round"/>${rows.map((w) => `<circle cx="${x(w)}" cy="${y(value(w), lo, hi)}" r="3.5" fill="${color}"><title>${dateLabel(w.date)}: ${fmt(value(w), 1)} ${unit}</title></circle>`).join("")}`;
+  return `<div class="chart-legend"><span style="color:#65894c">● Peso · kg (izquierda)</span>${fat.length ? '<span style="color:#537a9b">● Grasa estimada · % (derecha)</span>' : '<span>Agrega medidas para ver la grasa estimada.</span>'}</div><svg class="weight-plot" viewBox="0 0 520 220" role="img" aria-label="Evolución de peso en kilogramos y grasa corporal estimada en porcentaje">${[0,1,2,3,4].map((i) => `<line x1="45" y1="${25+i*42.5}" x2="470" y2="${25+i*42.5}" stroke="#e7ecdf" stroke-dasharray="4 4"/><text x="0" y="${29+i*42.5}" fill="#65894c" font-size="10">${fmt(max-(max-min)*i/4, 1)}</text>${fat.length ? `<text x="478" y="${29+i*42.5}" fill="#537a9b" font-size="10">${fmt(fatMax-(fatMax-fatMin)*i/4, 1)}</text>` : ""}`).join("")}${series(weights, (w) => w.kg, min, max, "#65894c", "kg")}${series(fat, (w) => navyBodyFat(w.bodyFat), fatMin, fatMax, "#537a9b", "%")}</svg><div class="plot-labels"><span>${dateLabel(weights[0].date)}</span><span>${dateLabel(weights.at(-1).date)}</span></div><p class="source-note">La grasa es una estimación; los días sin medidas no son cero.</p>`;
 }
 function exerciseProgressCard() {
   const list = exerciseCatalog().filter(
@@ -1971,21 +1963,24 @@ function customFoodModal(food = null, meal = "Desayuno") {
   });
 }
 function weightModal(date = selectedDate) {
-  const prior = state.weights.find((w) => w.date === date);
-  openModal(
-    prior ? "Actualizar peso" : "Un nuevo punto en tu camino.",
-    "Las tendencias cuentan más que un solo día.",
-    `<form id="weight-form"><div class="form-grid"><div class="field"><label for="weight-date">Fecha</label><input id="weight-date" name="date" type="date" max="${today()}" required value="${date}"></div><div class="field"><label for="weight-kg">Peso · kg</label><input id="weight-kg" name="kg" type="number" inputmode="decimal" min="1" max="500" step="0.1" required value="${prior?.kg || ""}" placeholder="Ej. 76.5" autofocus></div></div><p class="source-note">Se guarda un valor por día. Si ya existe un registro en esa fecha, se actualizará.</p><div class="modal-footer"><button type="button" class="btn" data-action="close">Cancelar</button><button type="submit" class="btn primary">${icon("check")}Guardar peso</button></div></form>`,
-  );
+  const prior = state.weights.find((w) => w.date === date), bf = prior?.bodyFat;
+  const profile = state.profile || {};
+  openModal(prior ? "Actualizar peso" : "Un nuevo punto en tu camino.", "Las tendencias cuentan más que un solo día.",
+    `<form id="weight-form"><div class="form-grid"><div class="field"><label for="weight-date">Fecha</label><input id="weight-date" name="date" type="date" max="${today()}" required value="${date}"></div><div class="field"><label for="weight-value">Peso</label><input id="weight-value" name="weight" type="number" inputmode="decimal" min="1" max="500" step="any" required value="${prior?.kg ?? ""}" autofocus></div><div class="field"><label for="weight-unit">Unidad de peso</label><select id="weight-unit"><option value="kg">kg</option><option value="lb">lb</option></select></div></div><p class="source-note">Un registro por día; si ya existe, se actualiza.</p><p><label><input type="checkbox" id="fat-enabled" ${bf ? "checked" : ""}> Estimar grasa corporal con cinta métrica</label></p><div id="fat-fields" ${bf ? "" : "hidden"}><div class="form-grid"><div class="field"><label for="fat-sex">Ecuación</label><select id="fat-sex"><option value="male" ${(bf?.sex || profile.sex) === "male" ? "selected" : ""}>Hombre</option><option value="female" ${(bf?.sex || profile.sex) === "female" ? "selected" : ""}>Mujer</option></select></div><div class="field"><label for="fat-height">Estatura · cm</label><input id="fat-height" type="number" inputmode="decimal" min="120" max="230" step="any" value="${bf?.height ?? profile.height ?? ""}"></div><div class="field"><label for="fat-neck">Cuello · cm</label><input id="fat-neck" type="number" inputmode="decimal" min="1" max="300" step="any" value="${bf?.neck ?? ""}"></div><div class="field"><label for="fat-waist">Cintura · cm</label><input id="fat-waist" type="number" inputmode="decimal" min="1" max="300" step="any" value="${bf?.waist ?? ""}"></div><div class="field" id="fat-hip-field"><label for="fat-hip">Cadera · cm</label><input id="fat-hip" type="number" inputmode="decimal" min="1" max="300" step="any" value="${bf?.hip ?? ""}"></div></div><p class="help-text">Mide el cuello debajo de la nuez. Para hombre, mide el abdomen a la altura del ombligo; para mujer, la cintura más estrecha y la cadera en su parte más ancha. Mantén la cinta horizontal y sin apretar.</p><p class="source-note">Método Navy: estimación orientativa, sensible a cómo tomas las medidas; no es una medición clínica. <a href="https://www.mynavyhr.navy.mil/Portals/55/Support/Culture%20Resilience/Physical/Guide%204%20-%20Body%20Composition%20Assessment.pdf?ver=E7NbYxxBqU4PkbWxQqnglQ%3D%3D" target="_blank" rel="noopener">Guía de medición Navy</a>.</p><p id="fat-preview" aria-live="polite"></p></div><div class="modal-footer"><button type="button" class="btn" data-action="close">Cancelar</button><button type="submit" class="btn primary">${icon("check")}Guardar registro</button></div></form>`);
+  const enabled = $("#fat-enabled"), fields = $("#fat-fields"), sex = $("#fat-sex"), hip = $("#fat-hip"), unit = $("#weight-unit"), value = $("#weight-value");
+  let previousUnit = "kg";
+  unit.addEventListener("change", () => { if (value.value) value.value = String(Math.round((previousUnit === "kg" ? kgToLb(+value.value) : lbToKg(+value.value)) * 100) / 100); previousUnit = unit.value; value.min = unit.value === "kg" ? 1 : kgToLb(1); value.max = unit.value === "kg" ? 500 : kgToLb(500); });
+  const measurement = () => ({ sex: sex.value, height: +$("#fat-height").value, neck: +$("#fat-neck").value, waist: +$("#fat-waist").value, ...(sex.value === "female" ? { hip: +hip.value } : {}) });
+  const update = () => { fields.hidden = !enabled.checked; $("#fat-hip-field").hidden = sex.value !== "female"; for (const id of ["fat-height", "fat-neck", "fat-waist"]) $("#" + id).required = enabled.checked; hip.required = enabled.checked && sex.value === "female"; const result = navyBodyFat(measurement()); $("#fat-preview").textContent = enabled.checked && result !== null ? `Grasa corporal estimada: ${fmt(result, 1)} %` : ""; };
+  enabled.addEventListener("change", update); fields.addEventListener("input", update); fields.addEventListener("change", update); update();
   $("#weight-form").addEventListener("submit", (e) => {
-    e.preventDefault();
-    const d = new FormData(e.target),
-      date = d.get("date");
-    const existing = state.weights.find((w) => w.date === date);
-    if (existing) existing.kg = +d.get("kg");
-    else state.weights.push({ date, kg: +d.get("kg") });
-    closeModal();
-    save("Peso guardado. Un paso más en tu camino.");
+    e.preventDefault(); const d = new FormData(e.target), day = d.get("date"), kg = unit.value === "lb" ? lbToKg(+d.get("weight")) : +d.get("weight");
+    if (kg < 1 || kg > 500) { value.setCustomValidity("Introduce un peso válido."); value.reportValidity(); value.setCustomValidity(""); return; }
+    const bodyFat = enabled.checked ? measurement() : undefined;
+    if (bodyFat && navyBodyFat(bodyFat) === null) { $("#fat-preview").textContent = "Revisa las medidas: no permiten calcular un porcentaje válido."; return; }
+    const existing = state.weights.find((w) => w.date === day), record = { date: day, kg, ...(bodyFat ? { bodyFat } : {}) };
+    if (existing) { existing.kg = kg; if (bodyFat) existing.bodyFat = bodyFat; else delete existing.bodyFat; } else state.weights.push(record);
+    closeModal(); save("Registro guardado.");
   });
 }
 function newSessionModal() {
